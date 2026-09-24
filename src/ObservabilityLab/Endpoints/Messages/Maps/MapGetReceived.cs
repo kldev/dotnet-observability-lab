@@ -16,7 +16,7 @@ internal static class MapGetReceived
             .WithName("Get received messages")
             .WithSummary("Get messages the consumer processed")
             .WithDescription(
-                $"Newest first, from memory: only the last {ReceivedMessages.Capacity} messages since the app started. ThreadId shows handlers running in parallel."
+                $"Newest first, from memory: only the last {ReceivedMessages.Capacity} messages since the app started. Covers every consumed queue (lab.messages and q.emails.*) - an email bound to several queues shows up once per queue. ThreadId shows handlers running in parallel."
             )
             .Produces<IReadOnlyList<ReceivedMessageResponse>>()
             .ProducesStandardErrors();

@@ -21,6 +21,21 @@ public sealed record QueueStatus(uint Ready, uint Consumers, uint DeadLettered);
 
 public sealed record GetReceivedMessages(int Limit) : IQuery<IReadOnlyList<ReceivedMessage>>;
 
+/// <summary>Publishes to the <c>x.emails</c> topic exchange with routing key <c>&lt;department&gt;.&lt;priority&gt;</c>.</summary>
+public sealed record PublishEmail(
+    EmailDepartment Department,
+    EmailPriority Priority,
+    string Subject,
+    int ProcessingMs,
+    bool Fail
+) : ICommand<PublishedEmail>;
+
+public sealed record PublishedEmail(LabMessage Message, string RoutingKey);
+
+public sealed record GetEmailQueues : IQuery<IReadOnlyList<EmailQueueStatus>>;
+
+public sealed record EmailQueueStatus(string Queue, string Binding, uint Ready, uint Consumers);
+
 // Handlers ------------------------------------------------------------------
 
 public sealed class PublishMessageHandler(MessagePublisher publisher)
@@ -104,4 +119,41 @@ public sealed class GetReceivedMessagesHandler(ReceivedMessages received)
         GetReceivedMessages query,
         CancellationToken ct
     ) => ValueTask.FromResult(received.Latest(query.Limit));
+}
+
+public sealed class PublishEmailHandler(MessagePublisher publisher)
+    : ICommandHandler<PublishEmail, PublishedEmail>
+{
+    public async ValueTask<PublishedEmail> Handle(PublishEmail command, CancellationToken ct)
+    {
+        var routingKey = MessagingTopology.EmailRoutingKey(command.Department, command.Priority);
+        var message = await publisher.PublishAsync(
+            MessagingTopology.EmailsExchange,
+            routingKey,
+            command.Subject,
+            command.ProcessingMs,
+            command.Fail,
+            ct
+        );
+        return new PublishedEmail(message, routingKey);
+    }
+}
+
+public sealed class GetEmailQueuesHandler(PublisherChannelPool channels)
+    : IQueryHandler<GetEmailQueues, IReadOnlyList<EmailQueueStatus>>
+{
+    public async ValueTask<IReadOnlyList<EmailQueueStatus>> Handle(
+        GetEmailQueues query,
+        CancellationToken ct
+    )
+    {
+        await using var lease = await channels.RentAsync(ct);
+        var statuses = new List<EmailQueueStatus>(MessagingTopology.EmailQueues.Count);
+        foreach (var (queue, binding) in MessagingTopology.EmailQueues)
+        {
+            var ok = await lease.Channel.QueueDeclarePassiveAsync(queue, ct);
+            statuses.Add(new EmailQueueStatus(queue, binding, ok.MessageCount, ok.ConsumerCount));
+        }
+        return statuses;
+    }
 }

@@ -7,6 +7,7 @@ internal static class ApiTags
 {
     public const string Orders = "Sales - Orders";
     public const string Messages = "Messaging - Messages";
+    public const string Emails = "Messaging - Emails";
 
     /// <summary>In the order Scalar lists them.</summary>
     public static readonly IReadOnlyList<(string Name, string Description)> All =
@@ -18,6 +19,10 @@ internal static class ApiTags
         (
             Messages,
             "RabbitMQ producer and consumer. Published messages are processed by a background consumer (acked, or dead-lettered on failure); bursts publish from many threads through a pool of publisher channels."
+        ),
+        (
+            Emails,
+            "Emails routed through the x.emails topic exchange by <department>.<priority>. Each q.emails.* queue takes what its binding pattern matches, so one email can reach several queues."
         ),
     ];
 

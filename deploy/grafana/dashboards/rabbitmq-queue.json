@@ -2273,8 +2273,8 @@
     },
     {
       "type": "row",
-      "title": "How to use",
-      "id": 35,
+      "title": "Emails (topic exchange x.emails, routing key <department>.<priority>)",
+      "id": 37,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -2285,18 +2285,700 @@
       "panels": []
     },
     {
+      "type": "stat",
+      "title": "Emails published/sec",
+      "id": 38,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 56
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(lab_messages_published_total{job=\"$job\",exchange=\"x.emails\",outcome=\"confirmed\"}[$__rate_interval]))",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Copies per email",
+      "id": 39,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Topic fan-out: how many q.emails.* queues one email reaches on average (audit always + department + urgent).",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 56
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(lab_messages_consumed_total{job=\"$job\",queue=~\"q\\\\.emails\\\\..*\"}[$__rate_interval])) / sum(rate(lab_messages_published_total{job=\"$job\",exchange=\"x.emails\",outcome=\"confirmed\"}[$__rate_interval]))",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Email backlog",
+      "id": 40,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Ready + unacked in all q.emails.* queues.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 56
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rabbitmq_detailed_queue_messages{queue=~\"q\\\\.emails\\\\..*\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Emails dead-lettered (range)",
+      "id": 41,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 56
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(lab_messages_consumed_total{job=\"$job\",queue=~\"q\\\\.emails\\\\..*\",outcome=\"DeadLettered\"}[$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Email processing P95",
+      "id": 42,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 56
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(lab_messages_process_duration_seconds_bucket{job=\"$job\",queue=~\"q\\\\.emails\\\\..*\"}[$__rate_interval])))",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Email queues with a consumer",
+      "id": 43,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Out of 5 q.emails.* queues.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 56
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(rabbitmq_detailed_queue_consumers{queue=~\"q\\\\.emails\\\\..*\"} > 0) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Published / sec by routing key",
+      "id": 44,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 60
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (routing_key) (rate(lab_messages_published_total{job=\"$job\",exchange=\"x.emails\",outcome=\"confirmed\"}[$__rate_interval]))",
+          "legendFormat": "{{routing_key}}",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Consumed / sec by queue",
+      "id": 45,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "q.emails.audit (#) gets everything; q.emails.urgent (*.urgent) only urgent ones.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 60
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (queue) (rate(lab_messages_consumed_total{job=\"$job\",queue=~\"q\\\\.emails\\\\..*\"}[$__rate_interval]))",
+          "legendFormat": "{{queue}}",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Email queue depth (ready)",
+      "id": 46,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "From the broker. A queue growing alone = its consumer is the slow one.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 60
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue=~\"q\\\\.emails\\\\..*\"})",
+          "legendFormat": "{{queue}}",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Email processing P95 by queue",
+      "id": 47,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 68
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, queue) (rate(lab_messages_process_duration_seconds_bucket{job=\"$job\",queue=~\"q\\\\.emails\\\\..*\"}[$__rate_interval])))",
+          "legendFormat": "{{queue}}",
+          "refId": "A",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Email end-to-end P95 by queue",
+      "id": 48,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 68
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, queue) (rate(lab_messages_end_to_end_duration_seconds_bucket{job=\"$job\",queue=~\"q\\\\.emails\\\\..*\"}[$__rate_interval])))",
+          "legendFormat": "{{queue}}",
+          "refId": "A",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "How to use",
+      "id": 35,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 76
+      },
+      "panels": []
+    },
+    {
       "type": "text",
       "title": "Producer -> queue -> consumer",
       "id": 36,
       "gridPos": {
-        "h": 8,
+        "h": 10,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 77
       },
       "options": {
         "mode": "markdown",
-        "content": "\n- **Publish**: `POST /api/messages` `{\"text\":\"hi\",\"processingMs\":200,\"fail\":false}` \u00b7 **burst** from many threads: `POST /api/messages/burst` `{\"count\":2000,\"parallelism\":32}` \u00b7 traffic: `./start.sh --messages` (k6).\n- **Consumer side**: `GET /api/messages/received` (last 200, with `threadId`) \u00b7 `GET /api/messages/queue` (broker counts) \u00b7 [RabbitMQ UI](http://localhost:15672).\n- **Channel pool**: `IChannel` is not thread-safe, so every concurrent publisher borrows a channel of its own. *Channels in use* at *pool size* plus a rising *Channel wait* = raise `RABBITMQ_PUBLISHER_CHANNELS`.\n- **Backlog**: *Ready* growing while *Consumer utilisation* is low = consumers are the bottleneck \u2192 raise `RABBITMQ_CONSUMER_CONCURRENCY` or `RABBITMQ_PREFETCH`, or send fewer slow messages.\n- **Failures**: `\"fail\": true` messages are rejected to `lab.messages.dead` - see *Dead-lettered* and the error logs in Rootprint (`severity_text:Error`, `attributes.MessageId:<id>`).\n- **Traces**: `deliver lab.message` (consumer) is a child of `publish lab.message` (producer) in the same trace - RabbitMQ.Client carries the trace context in message headers. Click an exemplar dot to open it in Rootprint.\n"
+        "content": "\n- **Publish**: `POST /api/messages` `{\"text\":\"hi\",\"processingMs\":200,\"fail\":false}` \u00b7 **burst** from many threads: `POST /api/messages/burst` `{\"count\":2000,\"parallelism\":32}` \u00b7 traffic: `./start.sh --messages` (k6).\n- **Emails (topic)**: `POST /api/emails` `{\"department\":\"Sales\",\"priority\":\"Urgent\",\"subject\":\"Offer\"}` \u2192 exchange `x.emails`, routing key `sales.urgent` \u2192 `q.emails.sales` (`sales.*`), `q.emails.urgent` (`*.urgent`), `q.emails.audit` (`#`). Bindings: `GET /api/emails/queues`. `*` = one word, `#` = zero or more.\n- **Consumer side**: `GET /api/messages/received` (last 200, with `threadId`) \u00b7 `GET /api/messages/queue` (broker counts) \u00b7 [RabbitMQ UI](http://localhost:15672).\n- **Channel pool**: `IChannel` is not thread-safe, so every concurrent publisher borrows a channel of its own. *Channels in use* at *pool size* plus a rising *Channel wait* = raise `RABBITMQ_PUBLISHER_CHANNELS`.\n- **Backlog**: *Ready* growing while *Consumer utilisation* is low = consumers are the bottleneck \u2192 raise `RABBITMQ_CONSUMER_CONCURRENCY` or `RABBITMQ_PREFETCH`, or send fewer slow messages.\n- **Failures**: `\"fail\": true` messages are rejected to `lab.messages.dead` - see *Dead-lettered* and the error logs in Rootprint (`severity_text:Error`, `attributes.MessageId:<id>`).\n- **Traces**: `deliver lab.message` (consumer) is a child of `publish lab.message` (producer) in the same trace - RabbitMQ.Client carries the trace context in message headers. Click an exemplar dot to open it in Rootprint.\n"
       }
     }
   ]

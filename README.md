@@ -125,6 +125,8 @@ Profil nasłuchuje na `0.0.0.0:5253`, żeby Prometheus w kontenerze mógł się 
 | POST | `/api/messages/burst` | producer: `count` wiadomości z `parallelism` równoległych zadań (`{"count":2000,"parallelism":32}`) → 200 |
 | GET | `/api/messages/received?limit=50` | consumer: ostatnio przetworzone wiadomości (outcome, `endToEndMs`, `threadId`) → 200 |
 | GET | `/api/messages/queue` | stan kolejki wg brokera: `ready`, `consumers`, `deadLettered` → 200 |
+| POST | `/api/emails` | producer: e-mail do exchange topic `x.emails` (`{"department":"Sales","priority":"Urgent","subject":"Offer"}`) → 202 + lista kolejek, do których trafi |
+| GET | `/api/emails/queues` | kolejki `q.emails.*`, ich bindingi i liczniki z brokera → 200 |
 | GET | `/health` | liveness (tylko proces) |
 | GET | `/health/ready` | readiness: aplikacja + PostgreSQL + RabbitMQ (używany przez Docker healthcheck) |
 | GET | `/metrics` | Prometheus / OpenMetrics (z exemplarami) |
@@ -147,6 +149,22 @@ Statusy: `Created`, `Paid`, `Cancelled`, `Completed`. Błędy zwracane są jako 
   `RABBITMQ_CONSUMER_CONCURRENCY` (handlery równolegle na thread poolu) i prefetch `RABBITMQ_PREFETCH`.
   Sukces → ack, wyjątek → nack bez requeue → `lab.messages.dead` (dead-letter queue, max 10 000).
 - Kolejki są typu quorum; po restarcie brokera klient sam odtwarza połączenie, kanały, topologię i consumera.
+
+### Exchange typu topic: `x.emails`
+
+Konwencja nazw: `x.` = exchange, `q.` = kolejka. Routing key to `<dział>.<priorytet>` (`recruitment.normal`, `sales.urgent`, ...),
+a każda kolejka bierze to, co pasuje do jej wzorca (`*` = dokładnie jedno słowo, `#` = zero lub więcej):
+
+| Kolejka | Binding | Dostaje |
+| --- | --- | --- |
+| `q.emails.recruitment` | `recruitment.*` | e-maile rekrutacji |
+| `q.emails.sales` | `sales.*` | e-maile sprzedaży |
+| `q.emails.support` | `support.*` | e-maile supportu |
+| `q.emails.urgent` | `*.urgent` | pilne ze wszystkich działów |
+| `q.emails.audit` | `#` | wszystko |
+
+Jeden e-mail trafia więc do kilku kolejek (`sales.urgent` → sales + urgent + audit), a consumer przetwarza go raz na kolejkę —
+w `GET /api/messages/received` widać to po polach `queue` i `routingKey`. Nowa kolejka = wpis w `MessagingTopology.EmailQueues`.
 
 ## 8. Jak zobaczyć logi
 
@@ -215,7 +233,8 @@ k6 run k6/orders.js                          # zwykły ruch (create/get/list/sta
 k6 run -e VUS=30 -e DURATION=10m k6/orders.js
 k6 run k6/problems.js                        # włącza random problems + co 10 s losowy /diagnostics/problem/*,
                                              # na koniec wyłącza random problems i zwalnia pamięć
-k6 run k6/messages.js                        # RabbitMQ: pojedyncze publikacje (część wolnych, ~3% z fail -> DLQ)
+k6 run k6/messages.js                        # RabbitMQ: pojedyncze publikacje (część wolnych, ~3% z fail -> DLQ),
+                                             # e-maile do x.emails (losowy dział/priorytet, support celowo wolny)
                                              # + co ~20 s burst 1000 wiadomości z 32 wątków
 ```
 
@@ -241,7 +260,8 @@ albo `traceId` z odpowiedzi ProblemDetails (`00-<traceId>-<spanId>-01`).
 - **Grafana → RabbitMQ queue (Observability Lab)** – osobny dashboard tylko dla kolejki (link w nagłówku głównego):
   *Broker* (połączenia, kanały, głębokość kolejki ready/unacked, message rates, consumer utilisation, pamięć),
   *Producer* (publish/s, latencja z confirmem, pula kanałów: in use vs size, czas czekania na kanał),
-  *Consumer* (consumed/s wg outcome, in-flight, czas przetwarzania, end-to-end, dead-letter queue).
+  *Consumer* (consumed/s wg outcome, in-flight, czas przetwarzania, end-to-end, dead-letter queue),
+  *Emails* (publish/s wg routing key, consumed/s i głębokość per kolejka `q.emails.*`, średni fan-out „copies per email”).
   Metryki brokera pochodzą z pluginu Prometheus RabbitMQ (`rabbitmq:15692`, joby `rabbitmq` i `rabbitmq-queues`). Dashboard i datasource są provisionowane z `deploy/grafana/` – nic nie trzeba klikać.
 - **Prometheus** – http://localhost:9090, np.:
 
@@ -308,6 +328,7 @@ src/ObservabilityLab/
   Orders/                      model, komendy/zapytania + handlery Mediatora (Dapper)
   Messaging/                   RabbitMQ: połączenie, pula kanałów publishera, producer, consumer (BackgroundService), topologia
   Endpoints/Messages/          publish, burst, received, queue
+  Endpoints/Emails/            publish do exchange topic x.emails, lista kolejek q.emails.*
   Diagnostics/                 celowe problemy + random problems
   Telemetry/                   ActivitySource/Meter, Mediator tracing behavior, health -> metryka
 tests/ObservabilityLab.Tests/  testy HTTP (WebApplicationFactory + Testcontainers: PostgreSQL, RabbitMQ), pula kanałów, random problems

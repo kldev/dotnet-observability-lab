@@ -9,7 +9,8 @@ using RabbitMQ.Client.Exceptions;
 namespace ObservabilityLab.Messaging;
 
 /// <summary>
-/// Consumer: processes messages from <see cref="MessagingTopology.Queue"/> with up to
+/// Consumer: processes messages from <see cref="MessagingTopology.ConsumedQueues"/> (lab.messages and
+/// the q.emails.* queues) on one channel, with up to
 /// <see cref="RabbitMqOptions.ConsumerConcurrency"/> handlers in parallel. Acks on success,
 /// rejects to the dead-letter queue on failure. Unacked messages go back to the queue when the app stops.
 /// </summary>
@@ -27,17 +28,18 @@ public sealed class MessageConsumer(
         await using var channel = await OpenChannelAsync(settings, stoppingToken);
         await channel.BasicQosAsync(0, (ushort)settings.Prefetch, global: false, stoppingToken);
 
-        var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += (_, delivery) => HandleAsync(channel, delivery, stoppingToken);
-        await channel.BasicConsumeAsync(
-            MessagingTopology.Queue,
-            autoAck: false,
-            consumer,
-            stoppingToken
-        );
+        // One consumer per queue, all on this channel: they share its dispatch concurrency,
+        // prefetch applies to each of them.
+        foreach (var queue in MessagingTopology.ConsumedQueues)
+        {
+            var consumer = new AsyncEventingBasicConsumer(channel);
+            consumer.ReceivedAsync += (_, delivery) =>
+                HandleAsync(channel, queue, delivery, stoppingToken);
+            await channel.BasicConsumeAsync(queue, autoAck: false, consumer, stoppingToken);
+        }
         logger.LogInformation(
-            "Consuming {Queue} with concurrency {Concurrency}, prefetch {Prefetch}",
-            MessagingTopology.Queue,
+            "Consuming {Queues} with concurrency {Concurrency}, prefetch {Prefetch}",
+            MessagingTopology.ConsumedQueues,
             settings.ConsumerConcurrency,
             settings.Prefetch
         );
@@ -89,6 +91,7 @@ public sealed class MessageConsumer(
 
     private async Task HandleAsync(
         IChannel channel,
+        string queue,
         BasicDeliverEventArgs delivery,
         CancellationToken stoppingToken
     )
@@ -103,7 +106,12 @@ public sealed class MessageConsumer(
                 JsonSerializer.Deserialize<LabMessage>(delivery.Body.Span, MessagePublisher.Json)
                 ?? throw new JsonException("Message body is null");
             using var scope = logger.BeginScope(
-                new Dictionary<string, object> { ["MessageId"] = message.Id }
+                new Dictionary<string, object>
+                {
+                    ["MessageId"] = message.Id,
+                    ["Queue"] = queue,
+                    ["RoutingKey"] = delivery.RoutingKey,
+                }
             );
 
             if (message.ProcessingMs > 0)
@@ -132,8 +140,9 @@ public sealed class MessageConsumer(
             outcome = MessageOutcome.DeadLettered;
             logger.LogError(
                 ex,
-                "Message {MessageId} failed, sending it to {DeadLetterQueue}",
+                "Message {MessageId} from {Queue} failed, sending it to {DeadLetterQueue}",
                 message?.Id.ToString() ?? delivery.BasicProperties.MessageId,
+                queue,
                 MessagingTopology.DeadLetterQueue
             );
             await channel.BasicNackAsync(
@@ -145,11 +154,15 @@ public sealed class MessageConsumer(
         }
 
         LabTelemetry.MessagesInFlight.Add(-1);
-        var outcomeTag = new KeyValuePair<string, object?>("outcome", outcome.ToString());
-        LabTelemetry.MessagesConsumed.Add(1, outcomeTag);
+        KeyValuePair<string, object?>[] tags =
+        [
+            new("outcome", outcome.ToString()),
+            new("queue", queue),
+        ];
+        LabTelemetry.MessagesConsumed.Add(1, tags);
         LabTelemetry.MessageProcessDuration.Record(
             Stopwatch.GetElapsedTime(started).TotalSeconds,
-            outcomeTag
+            tags
         );
 
         if (message is null)
@@ -157,11 +170,13 @@ public sealed class MessageConsumer(
         var completedAt = time.GetUtcNow();
         LabTelemetry.MessageEndToEndDuration.Record(
             (completedAt - message.PublishedAt).TotalSeconds,
-            outcomeTag
+            tags
         );
         received.Add(
             new ReceivedMessage(
                 message,
+                queue,
+                delivery.RoutingKey,
                 outcome,
                 completedAt,
                 delivery.Redelivered,

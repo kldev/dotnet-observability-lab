@@ -29,6 +29,14 @@ internal static class ApiRoutes
         public const string Queue = $"{Base}/queue";
     }
 
+    internal static class Emails
+    {
+        public const string Base = $"{ApiRoutes.Base}/emails";
+
+        public const string Publish = Base;
+        public const string Queues = $"{Base}/queues";
+    }
+
     /// <summary>Lab-only endpoints that break things on purpose (mapped only when diagnostics are enabled).</summary>
     internal static class Diagnostics
     {

@@ -1,5 +1,6 @@
-// RabbitMQ traffic: single publishes (some slow, some failing -> dead-letter queue) plus
-// periodic bursts that publish from many threads at once through the publisher channel pool.
+// RabbitMQ traffic: single publishes (some slow, some failing -> dead-letter queue), emails to the
+// x.emails topic exchange (random <department>.<priority>), plus periodic bursts that publish from
+// many threads at once through the publisher channel pool.
 //
 //   k6 run k6/messages.js
 //   k6 run -e BASE_URL=http://localhost:8080 -e VUS=10 -e DURATION=10m k6/messages.js
@@ -17,6 +18,12 @@ export const options = {
       vus: Number(__ENV.VUS || 5),
       duration: DURATION,
       exec: 'publish',
+    },
+    emails: {
+      executor: 'constant-vus',
+      vus: Number(__ENV.EMAIL_VUS || 3),
+      duration: DURATION,
+      exec: 'email',
     },
     // Every ~20 s: 1000 messages from 32 concurrent tasks - shows channel pool waits and a queue backlog.
     bursts: {
@@ -47,6 +54,23 @@ export function publish() {
   if (__ITER % 20 === 0) {
     check(http.get(`${BASE_URL}/api/messages/queue`), { 'queue -> 200': (r) => r.status === 200 });
   }
+  sleep(0.2 + Math.random() * 0.3);
+}
+
+const departments = ['Recruitment', 'Sales', 'Support'];
+
+export function email() {
+  const body = {
+    department: departments[Math.floor(Math.random() * departments.length)],
+    priority: Math.random() < 0.2 ? 'Urgent' : 'Normal',
+    subject: `k6 email ${__VU}-${__ITER}`,
+    // Support is the slow department - its queue builds up first.
+    processingMs: Math.floor(Math.random() * 40),
+    fail: Math.random() > 0.98,
+  };
+  if (body.department === 'Support') body.processingMs += 300;
+  const res = http.post(`${BASE_URL}/api/emails`, JSON.stringify(body), json);
+  check(res, { 'email -> 202': (r) => r.status === 202 });
   sleep(0.2 + Math.random() * 0.3);
 }
 

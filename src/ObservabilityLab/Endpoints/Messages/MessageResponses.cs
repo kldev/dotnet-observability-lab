@@ -29,6 +29,8 @@ public sealed record PublishBurstResponse(
 
 public sealed record ReceivedMessageResponse(
     Guid Id,
+    string Queue,
+    string RoutingKey,
     string Text,
     MessageOutcome Outcome,
     DateTimeOffset PublishedAt,
@@ -41,6 +43,8 @@ public sealed record ReceivedMessageResponse(
     internal static ReceivedMessageResponse From(ReceivedMessage received) =>
         new(
             received.Message.Id,
+            received.Queue,
+            received.RoutingKey,
             received.Message.Text,
             received.Outcome,
             received.Message.PublishedAt,

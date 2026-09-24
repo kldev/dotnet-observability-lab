@@ -9,6 +9,7 @@ public static class MapEndpoints
     {
         Orders.Endpoint.Map(app);
         Messages.Endpoint.Map(app);
+        Emails.Endpoint.Map(app);
 
         // Lab-only problem injection: mapped only when enabled, and kept out of the OpenAPI document.
         if (

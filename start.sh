@@ -149,6 +149,7 @@ if [ -n "$DETACH_ARG" ]; then
     echo "     Metrics:   $APP/metrics"
     echo "     Orders:    $APP/api/orders"
     echo "     Messages:  $APP/api/messages  (/burst, /received, /queue)"
+    echo "     Emails:    $APP/api/emails  (topic exchange x.emails, /queues)"
     echo ""
     echo "  Grafana:      http://localhost:${GRAFANA_PORT:-3000}  (user: ${GRAFANA_ADMIN_USER:-admin})"
     echo "  Prometheus:   http://localhost:${PROMETHEUS_PORT:-9090}"

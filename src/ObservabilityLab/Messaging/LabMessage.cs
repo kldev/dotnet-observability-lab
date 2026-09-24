@@ -12,6 +12,19 @@ public sealed record LabMessage(
     DateTimeOffset PublishedAt
 );
 
+public enum EmailDepartment
+{
+    Recruitment,
+    Sales,
+    Support,
+}
+
+public enum EmailPriority
+{
+    Normal,
+    Urgent,
+}
+
 public enum MessageOutcome
 {
     Acked,
@@ -21,6 +34,8 @@ public enum MessageOutcome
 /// <summary>A message the consumer finished with. <see cref="ThreadId"/> shows handlers running on many threads.</summary>
 public sealed record ReceivedMessage(
     LabMessage Message,
+    string Queue,
+    string RoutingKey,
     MessageOutcome Outcome,
     DateTimeOffset CompletedAt,
     bool Redelivered,

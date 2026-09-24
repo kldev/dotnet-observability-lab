@@ -14,7 +14,24 @@ public sealed class MessagePublisher(
 {
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    public Task<LabMessage> PublishAsync(
+        string text,
+        int processingMs,
+        bool fail,
+        CancellationToken ct
+    ) =>
+        PublishAsync(
+            MessagingTopology.Exchange,
+            MessagingTopology.RoutingKey,
+            text,
+            processingMs,
+            fail,
+            ct
+        );
+
     public async Task<LabMessage> PublishAsync(
+        string exchange,
+        string routingKey,
         string text,
         int processingMs,
         bool fail,
@@ -45,8 +62,8 @@ public sealed class MessagePublisher(
             await using var lease = await channels.RentAsync(ct);
             // mandatory: an unroutable message is returned (PublishReturnException) instead of silently dropped.
             await lease.Channel.BasicPublishAsync(
-                MessagingTopology.Exchange,
-                MessagingTopology.RoutingKey,
+                exchange,
+                routingKey,
                 mandatory: true,
                 properties,
                 body,
@@ -56,17 +73,25 @@ public sealed class MessagePublisher(
         }
         finally
         {
-            LabTelemetry.MessagesPublished.Add(
-                1,
-                new KeyValuePair<string, object?>("outcome", outcome)
-            );
+            KeyValuePair<string, object?>[] tags =
+            [
+                new("outcome", outcome),
+                new("exchange", exchange),
+                new("routing_key", routingKey),
+            ];
+            LabTelemetry.MessagesPublished.Add(1, tags);
             LabTelemetry.MessagePublishDuration.Record(
                 Stopwatch.GetElapsedTime(started).TotalSeconds,
-                new KeyValuePair<string, object?>("outcome", outcome)
+                tags
             );
         }
 
-        logger.LogDebug("Message {MessageId} published", message.Id);
+        logger.LogDebug(
+            "Message {MessageId} published to {Exchange} with {RoutingKey}",
+            message.Id,
+            exchange,
+            routingKey
+        );
         return message;
     }
 }
