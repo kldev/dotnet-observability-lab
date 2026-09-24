@@ -265,7 +265,8 @@ Ręcznie: `dotnet husky install`, `dotnet husky run --group pre-commit`. Wyłąc
 
 ```text
 src/ObservabilityLab/
-  Program.cs                   konfiguracja: Npgsql, Mediator, OpenTelemetry, logowanie, health, OpenAPI
+  Program.cs                   kolejność rejestracji, middleware i mapowania - bez szczegółów
+  Hosting/                     extension methods: dane (Npgsql/Dapper), Mediator, HTTP API + OpenAPI, health, logi + OpenTelemetry
   Api/                         stałe tras, tagi OpenAPI, wspólne kody błędów, SliceResponse
   Endpoints/MapEndpoints.cs    jedno miejsce rejestracji wszystkich endpointów
   Endpoints/Orders/            Endpoint.cs (grupa + tag) + Maps/Map<Verb>.cs (jedna operacja = jeden plik), OrderResponse
