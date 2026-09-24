@@ -14,3 +14,17 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["host.docker.internal:5253"]
+
+  # RabbitMQ built-in Prometheus plugin: node-wide totals (connections, channels, global message rates, memory).
+  - job_name: rabbitmq
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+
+  # ...and the same plugin per queue (messages ready/unacked, consumers, consumer utilisation).
+  - job_name: rabbitmq-queues
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics, queue_consumer_count, queue_metrics]
+    static_configs:
+      - targets: ["rabbitmq:15692"]

@@ -8,6 +8,7 @@ public static class MapEndpoints
     public static void MapLabEndpoints(this WebApplication app)
     {
         Orders.Endpoint.Map(app);
+        Messages.Endpoint.Map(app);
 
         // Lab-only problem injection: mapped only when enabled, and kept out of the OpenAPI document.
         if (

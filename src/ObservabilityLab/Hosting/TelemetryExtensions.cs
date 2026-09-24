@@ -40,6 +40,8 @@ public static class TelemetryExtensions
             )
             .WithTracing(t =>
                 t.AddSource(LabTelemetry.SourceName)
+                    // Built into RabbitMQ.Client 7: publish/deliver spans, trace context carried in message headers.
+                    .AddSource("RabbitMQ.Client.Publisher", "RabbitMQ.Client.Subscriber")
                     .AddAspNetCoreInstrumentation(o =>
                     {
                         // Scrapes and docker health probes would drown real traffic; health is visible as the lab.health.status metric.

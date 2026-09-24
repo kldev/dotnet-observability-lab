@@ -2,7 +2,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #
 # - app runs with ASPNETCORE_ENVIRONMENT=Development (diagnostics endpoints always on, more logs)
-# - PostgreSQL, OTLP (collector) and Quickwit are published on the host, so you can
+# - PostgreSQL, RabbitMQ (AMQP), OTLP (collector) and Quickwit are published on the host, so you can
 #   run the app locally with `dotnet run` (see README) and use psql / Quickwit UI directly.
 services:
   app:
@@ -13,6 +13,10 @@ services:
   postgres:
     ports:
       - "5432:5432"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"   # AMQP
 
   otel-collector:
     ports:

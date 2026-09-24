@@ -1,18 +1,20 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using ObservabilityLab.Messaging;
 using ObservabilityLab.Telemetry;
 
 namespace ObservabilityLab.Hosting;
 
 public static class HealthCheckExtensions
 {
-    /// <summary>Liveness + PostgreSQL readiness, also published as the lab.health.status metric.</summary>
+    /// <summary>Liveness + PostgreSQL and RabbitMQ readiness, also published as the lab.health.status metric.</summary>
     public static IHostApplicationBuilder AddLabHealthChecks(this IHostApplicationBuilder builder)
     {
         builder
             .Services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
-            .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"]);
+            .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"])
+            .AddCheck<RabbitMqHealthCheck>("rabbitmq", tags: ["ready"]);
         builder.Services.AddSingleton<IHealthCheckPublisher, HealthMetricsPublisher>();
         builder.Services.Configure<HealthCheckPublisherOptions>(o =>
         {

@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddDataAccess();
 builder.AddApplication();
+builder.AddMessaging();
 builder.AddHttpApi();
 builder.AddLabHealthChecks();
 builder.AddLabTelemetry();

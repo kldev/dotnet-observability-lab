@@ -22,13 +22,14 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --build, --b        Force rebuild of the app image"
-    echo "  --dev, --expose     Also expose PostgreSQL (5432), OTLP (4317/4318) and Quickwit (7280) on the host"
+    echo "  --dev, --expose     Also expose PostgreSQL (5432), RabbitMQ (5672), OTLP (4317/4318) and Quickwit (7280) on the host"
     echo "                      (docker-compose.dev.yml, app in Development; needed for 'dotnet run')"
     echo "  --foreground, -f    Run in foreground (see logs)"
     echo "  --logs, --l [svc]   Follow logs (default: app)"
     echo "  --status, --ps      Show containers"
     echo "  --traffic           Generate traffic with k6 (k6/orders.js)"
     echo "  --problems          Generate traffic with random problems ON (k6/problems.js)"
+    echo "  --messages          Generate RabbitMQ traffic with k6 (k6/messages.js)"
     echo "  --sa                Stop only the app (e.g. before 'dotnet run')"
     echo "  --stop              Stop and remove containers (data is kept)"
     echo "  --clean, --c        Remove containers AND volumes (all data)"
@@ -90,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             k6 run "$SCRIPT_DIR/k6/problems.js"
             exit 0
             ;;
+        --messages)
+            k6 run "$SCRIPT_DIR/k6/messages.js"
+            exit 0
+            ;;
         --sa)
             "${COMPOSE[@]}" stop app
             exit 0
@@ -125,7 +130,7 @@ echo ""
 load_env
 
 echo "Starting services..."
-[ "$EXPOSE" = true ] && echo "  (dev mode: PostgreSQL, OTLP and Quickwit exposed on the host)"
+[ "$EXPOSE" = true ] && echo "  (dev mode: PostgreSQL, RabbitMQ, OTLP and Quickwit exposed on the host)"
 echo ""
 
 "${COMPOSE[@]}" "${COMPOSE_FILES[@]}" up $BUILD_ARG $DETACH_ARG
@@ -143,9 +148,11 @@ if [ -n "$DETACH_ARG" ]; then
     echo "     OpenAPI:   $APP/openapi/v1.json"
     echo "     Metrics:   $APP/metrics"
     echo "     Orders:    $APP/api/orders"
+    echo "     Messages:  $APP/api/messages  (/burst, /received, /queue)"
     echo ""
     echo "  Grafana:      http://localhost:${GRAFANA_PORT:-3000}  (user: ${GRAFANA_ADMIN_USER:-admin})"
     echo "  Prometheus:   http://localhost:${PROMETHEUS_PORT:-9090}"
+    echo "  RabbitMQ:     http://localhost:${RABBITMQ_UI_PORT:-15672}  (management UI, user: ${RABBITMQ_USER:-lab})"
     echo "  Rootprint:    http://localhost:${ROOTPRINT_PORT:-8282}  (user: ${ROOTPRINT_ADMIN_EMAIL:-admin@lab.local})"
     echo "  RustFS:       http://localhost:${RUSTFS_CONSOLE_PORT:-9001}  (console, user: $S3_ACCESS_KEY)"
     echo "                http://localhost:${RUSTFS_S3_PORT:-9000}  (S3 API, bucket: ${S3_BUCKET:-observability-logs})"
@@ -153,6 +160,7 @@ if [ -n "$DETACH_ARG" ]; then
         echo ""
         echo "  Exposed (dev):"
         echo "    PostgreSQL: localhost:5432  (db: ${POSTGRES_DB:-orders}, user: ${POSTGRES_USER:-lab})"
+        echo "    RabbitMQ:   amqp://localhost:5672  (user: ${RABBITMQ_USER:-lab})"
         echo "    OTLP:       localhost:4317 (gRPC), localhost:4318 (HTTP)"
         echo "    Quickwit:   http://localhost:7280/ui"
     fi
@@ -166,7 +174,7 @@ if [ -n "$DETACH_ARG" ]; then
     echo ""
     echo "Commands:"
     echo "  View logs:      ./start.sh --logs [service]"
-    echo "  Traffic (k6):   ./start.sh --traffic | --problems"
+    echo "  Traffic (k6):   ./start.sh --traffic | --problems | --messages"
     echo "  Stop services:  ./start.sh --stop"
     echo "  Clean all:      ./start.sh --clean"
     echo ""

@@ -30,6 +30,22 @@
       "url": "http://localhost:9090",
       "targetBlank": true,
       "icon": "external link"
+    },
+    {
+      "title": "RabbitMQ queue",
+      "type": "link",
+      "url": "/d/observability-lab-rabbitmq",
+      "targetBlank": false,
+      "icon": "dashboard",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "RabbitMQ UI",
+      "type": "link",
+      "url": "http://localhost:15672",
+      "targetBlank": true,
+      "icon": "external link"
     }
   ],
   "templating": {
@@ -555,7 +571,7 @@
       "description": "",
       "gridPos": {
         "h": 4,
-        "w": 3,
+        "w": 2,
         "x": 12,
         "y": 5
       },
@@ -617,8 +633,8 @@
       "description": "",
       "gridPos": {
         "h": 4,
-        "w": 3,
-        "x": 15,
+        "w": 2,
+        "x": 14,
         "y": 5
       },
       "targets": [
@@ -680,7 +696,7 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 18,
+        "x": 16,
         "y": 5
       },
       "targets": [
@@ -740,6 +756,76 @@
     },
     {
       "type": "stat",
+      "title": "RabbitMQ health",
+      "id": 52,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "From the periodic health check publisher (lab_health_status).",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 19,
+        "y": 5
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "min(lab_health_status{job=\"$job\",check=\"rabbitmq\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false,
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
       "title": "App up",
       "id": 12,
       "datasource": {
@@ -749,8 +835,8 @@
       "description": "Prometheus scrape status.",
       "gridPos": {
         "h": 4,
-        "w": 3,
-        "x": 21,
+        "w": 2,
+        "x": 22,
         "y": 5
       },
       "targets": [
@@ -3191,6 +3277,582 @@
     },
     {
       "type": "row",
+      "title": "Messaging (RabbitMQ) - details on the RabbitMQ queue dashboard",
+      "id": 53,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Published/sec",
+      "id": 54,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Messages confirmed by the broker (lab_messages_published_total).",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 73
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(lab_messages_published_total{job=\"$job\"}[$__rate_interval]))",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Consumed/sec",
+      "id": 55,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 73
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(lab_messages_consumed_total{job=\"$job\"}[$__rate_interval]))",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Queue backlog",
+      "id": 56,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Ready + unacked messages in lab.messages, as reported by the broker.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 73
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rabbitmq_detailed_queue_messages{queue=\"lab.messages\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Dead-lettered (range)",
+      "id": 57,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 73
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(lab_messages_consumed_total{job=\"$job\",outcome=\"DeadLettered\"}[$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Publish P95",
+      "id": 58,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Including the wait for a pooled channel and the broker confirm.",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 73
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(lab_messages_publish_duration_seconds_bucket{job=\"$job\"}[$__rate_interval])))",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Publisher channels in use",
+      "id": 59,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Channels lent out by the publisher pool right now (max = RABBITMQ_PUBLISHER_CHANNELS).",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 73
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(lab_rabbitmq_publisher_channels_in_use{job=\"$job\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages / sec",
+      "id": 60,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 77
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(lab_messages_published_total{job=\"$job\",outcome=\"confirmed\"}[$__rate_interval]))",
+          "legendFormat": "published",
+          "refId": "A",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (rate(lab_messages_consumed_total{job=\"$job\"}[$__rate_interval]))",
+          "legendFormat": "consumed {{outcome}}",
+          "refId": "B",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(lab_messages_published_total{job=\"$job\",outcome=\"failed\"}[$__rate_interval]))",
+          "legendFormat": "publish failed",
+          "refId": "C",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "consumed DeadLettered"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "publish failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "End-to-end latency P50 / P95 / P99 (publish -> processed, with exemplars)",
+      "id": 61,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 77
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(lab_messages_end_to_end_duration_seconds_bucket{job=\"$job\"}[$__rate_interval])))",
+          "legendFormat": "P50",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(lab_messages_end_to_end_duration_seconds_bucket{job=\"$job\"}[$__rate_interval])))",
+          "legendFormat": "P95",
+          "refId": "B",
+          "exemplar": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(lab_messages_end_to_end_duration_seconds_bucket{job=\"$job\"}[$__rate_interval])))",
+          "legendFormat": "P99",
+          "refId": "C",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
       "title": "Where to look next",
       "id": 50,
       "collapsed": false,
@@ -3198,7 +3860,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 85
       },
       "panels": []
     },
@@ -3210,11 +3872,11 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 86
       },
       "options": {
         "mode": "markdown",
-        "content": "\n1. **Spot the anomaly** here (5xx, P95 spike, DB failures, CPU/Memory).\n2. **Open a trace**: on *Latency* / *DB latency* charts hover an exemplar dot \u2192 **Open trace in Rootprint**\n   (or go to [Rootprint \u2192 Traces](http://localhost:8282/traces), filter by service `observability-lab`, sort by duration / errors).\n3. The trace waterfall shows **HTTP request \u2192 Mediator \u2192 handler \u2192 PostgreSQL** with per-span timing.\n4. **Logs**: in [Rootprint \u2192 Logs](http://localhost:8282/) search `trace_id:<id>` (or `attributes.OrderId:<id>`, `severity_text:Error`).\n   Logs and traces are stored by Quickwit in the RustFS bucket (S3).\n\nGenerate problems: `/diagnostics/problem/{slow,bad-request,not-found,error,exception,slow-db,db-error,cpu,memory}` \u00b7 random mode: `PUT /diagnostics/random-problems` \u00b7 API docs: [localhost:8080/docs](http://localhost:8080/docs)\n"
+        "content": "\n1. **Spot the anomaly** here (5xx, P95 spike, DB failures, CPU/Memory).\n2. **Open a trace**: on *Latency* / *DB latency* charts hover an exemplar dot \u2192 **Open trace in Rootprint**\n   (or go to [Rootprint \u2192 Traces](http://localhost:8282/traces), filter by service `observability-lab`, sort by duration / errors).\n3. The trace waterfall shows **HTTP request \u2192 Mediator \u2192 handler \u2192 PostgreSQL** with per-span timing.\n4. **Logs**: in [Rootprint \u2192 Logs](http://localhost:8282/) search `trace_id:<id>` (or `attributes.OrderId:<id>`, `severity_text:Error`).\n   Logs and traces are stored by Quickwit in the RustFS bucket (S3).\n\n5. **Messages**: slow consumers show up as a growing *Queue backlog* and *End-to-end latency*; open the **RabbitMQ queue** dashboard for broker, producer and consumer details.\n\nGenerate problems: `/diagnostics/problem/{slow,bad-request,not-found,error,exception,slow-db,db-error,cpu,memory}` \u00b7 random mode: `PUT /diagnostics/random-problems` \u00b7 API docs: [localhost:8080/docs](http://localhost:8080/docs)\n"
       }
     }
   ]

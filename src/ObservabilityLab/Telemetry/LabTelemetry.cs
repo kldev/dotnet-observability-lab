@@ -36,6 +36,91 @@ public static class LabTelemetry
         "Problems injected on purpose (diagnostics + random mode)"
     );
 
+    // Seconds-based buckets from 1 ms to 30 s (the SDK default buckets assume milliseconds).
+    private static readonly InstrumentAdvice<double> SecondsBuckets = new()
+    {
+        HistogramBucketBoundaries =
+        [
+            0.001,
+            0.0025,
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1,
+            2.5,
+            5,
+            10,
+            30,
+        ],
+    };
+
+    // --- RabbitMQ: producer -------------------------------------------------------------------
+
+    public static readonly Counter<long> MessagesPublished = Meter.CreateCounter<long>(
+        "lab.messages.published",
+        "{message}",
+        "Messages published to RabbitMQ by outcome (confirmed by the broker, or failed)"
+    );
+
+    public static readonly Histogram<double> MessagePublishDuration = Meter.CreateHistogram(
+        "lab.messages.publish.duration",
+        "s",
+        "Publish including the wait for a pooled channel and the broker confirm",
+        advice: SecondsBuckets
+    );
+
+    public static readonly Histogram<double> PublisherChannelWait = Meter.CreateHistogram(
+        "lab.rabbitmq.publisher.channel.wait",
+        "s",
+        "Time a publisher waited for a free channel (grows when the pool is too small)",
+        advice: SecondsBuckets
+    );
+
+    public static readonly UpDownCounter<long> PublisherChannelsInUse =
+        Meter.CreateUpDownCounter<long>(
+            "lab.rabbitmq.publisher.channels.in_use",
+            "{channel}",
+            "Publisher channels currently lent to a caller"
+        );
+
+    public static readonly Counter<long> PublisherChannelsOpened = Meter.CreateCounter<long>(
+        "lab.rabbitmq.publisher.channels.opened",
+        "{channel}",
+        "Publisher channels opened (flat when the pool reuses them)"
+    );
+
+    // --- RabbitMQ: consumer -------------------------------------------------------------------
+
+    public static readonly Counter<long> MessagesConsumed = Meter.CreateCounter<long>(
+        "lab.messages.consumed",
+        "{message}",
+        "Messages the consumer finished with, by outcome (Acked or DeadLettered)"
+    );
+
+    public static readonly Histogram<double> MessageProcessDuration = Meter.CreateHistogram(
+        "lab.messages.process.duration",
+        "s",
+        "Time the consumer spent on one message",
+        advice: SecondsBuckets
+    );
+
+    public static readonly Histogram<double> MessageEndToEndDuration = Meter.CreateHistogram(
+        "lab.messages.end_to_end.duration",
+        "s",
+        "From publish to the end of processing (queue wait + processing)",
+        advice: SecondsBuckets
+    );
+
+    public static readonly UpDownCounter<long> MessagesInFlight = Meter.CreateUpDownCounter<long>(
+        "lab.messages.in_flight",
+        "{message}",
+        "Messages being processed by the consumer right now"
+    );
+
     static LabTelemetry()
     {
         // Denominator for "Memory %" on the dashboard: working set / memory limit.

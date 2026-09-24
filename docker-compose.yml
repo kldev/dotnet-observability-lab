@@ -1,6 +1,8 @@
 # Observability lab - everything with one command:  docker compose up -d
 #
 #   app ──/metrics──▶ prometheus ──▶ grafana
+#    │                   ▲
+#    ├──AMQP──▶ rabbitmq ┘ (:15692 broker + per-queue metrics)
 #    │
 #    └──OTLP (logs + traces)──▶ otel-collector ──▶ rootprint ──▶ quickwit ──S3 API──▶ rustfs
 #
@@ -24,11 +26,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       otel-collector:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Orders: Host=postgres;Port=5432;Database=${POSTGRES_DB:-orders};Username=${POSTGRES_USER:-lab};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # URL-encode the password if it has special characters (it is part of an amqp:// URI).
+      ConnectionStrings__RabbitMq: amqp://${RABBITMQ_USER:-lab}:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}@rabbitmq:5672/
+      RabbitMq__PublisherChannels: ${RABBITMQ_PUBLISHER_CHANNELS:-4}
+      RabbitMq__ConsumerConcurrency: ${RABBITMQ_CONSUMER_CONCURRENCY:-4}
+      RabbitMq__Prefetch: ${RABBITMQ_PREFETCH:-32}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_METRIC_EXPORT_INTERVAL: 5000
       DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-true}
@@ -61,6 +70,25 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # --- Messaging -----------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    # The node name comes from the hostname - it must stay the same, or the node won't find its data after a restart.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-lab}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "${RABBITMQ_UI_PORT:-15672}:15672"   # management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
 
   # --- Metrics -------------------------------------------------------------------------------
   prometheus:
@@ -201,6 +229,7 @@ services:
 
 volumes:
   postgres-data:
+  rabbitmq-data:
   prometheus-data:
   grafana-data:
   quickwit-data:

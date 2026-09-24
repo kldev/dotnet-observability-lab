@@ -6,6 +6,7 @@ namespace ObservabilityLab.Api;
 internal static class ApiTags
 {
     public const string Orders = "Sales - Orders";
+    public const string Messages = "Messaging - Messages";
 
     /// <summary>In the order Scalar lists them.</summary>
     public static readonly IReadOnlyList<(string Name, string Description)> All =
@@ -13,6 +14,10 @@ internal static class ApiTags
         (
             Orders,
             "Customer orders and their lifecycle: Created → Paid → Completed, or Cancelled. Exists to generate realistic traffic for the observability stack."
+        ),
+        (
+            Messages,
+            "RabbitMQ producer and consumer. Published messages are processed by a background consumer (acked, or dead-lettered on failure); bursts publish from many threads through a pool of publisher channels."
         ),
     ];
 

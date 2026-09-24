@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using ObservabilityLab.Api;
+using RabbitMQ.Client.Exceptions;
 using Scalar.AspNetCore;
 
 namespace ObservabilityLab.Hosting;
@@ -13,11 +14,16 @@ public static class HttpApiExtensions
 
         // Bad input that fails binding (e.g. unknown enum value) is a 400, not a 500 - also in Development,
         // where minimal APIs throw BadHttpRequestException instead of answering 400 directly.
+        // Broker down or connection recovering is a 503 - the same request can succeed a moment later.
         builder.Services.Configure<ExceptionHandlerOptions>(o =>
             o.StatusCodeSelector = ex =>
-                ex is BadHttpRequestException bad
-                    ? bad.StatusCode
-                    : StatusCodes.Status500InternalServerError
+                ex switch
+                {
+                    BadHttpRequestException bad => bad.StatusCode,
+                    BrokerUnreachableException or OperationInterruptedException =>
+                        StatusCodes.Status503ServiceUnavailable,
+                    _ => StatusCodes.Status500InternalServerError,
+                }
         );
         builder.Services.AddValidation();
         builder.Services.ConfigureHttpJsonOptions(o =>
@@ -36,7 +42,8 @@ public static class HttpApiExtensions
                         document.Info.Version = "v1";
                         document.Info.Description = """
                             A deliberately small Orders API that exists to generate logs, metrics and traces
-                            for the observability stack (Prometheus, Grafana, Rootprint on RustFS/S3).
+                            for the observability stack (Prometheus, Grafana, Rootprint on RustFS/S3),
+                            plus a RabbitMQ producer and consumer (/api/messages) with a thread-safe publisher channel pool.
                             Problem-injection endpoints (/diagnostics/*) are lab tools and are not part of this document.
                             """;
                         return Task.CompletedTask;

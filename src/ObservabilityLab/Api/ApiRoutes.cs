@@ -19,6 +19,16 @@ internal static class ApiRoutes
         public static string StatusFor(Guid orderId) => $"{Base}/{orderId}/status";
     }
 
+    internal static class Messages
+    {
+        public const string Base = $"{ApiRoutes.Base}/messages";
+
+        public const string Publish = Base;
+        public const string PublishBurst = $"{Base}/burst";
+        public const string Received = $"{Base}/received";
+        public const string Queue = $"{Base}/queue";
+    }
+
     /// <summary>Lab-only endpoints that break things on purpose (mapped only when diagnostics are enabled).</summary>
     internal static class Diagnostics
     {

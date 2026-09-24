@@ -1,7 +1,7 @@
 # .NET 10 Observability Lab
 
 Mały, lokalny playground do nauki **observability i DevOps** na .NET 10:
-logi, metryki, trace'y, Prometheus, Grafana, OpenTelemetry, PostgreSQL, Docker Compose
+logi, metryki, trace'y, Prometheus, Grafana, OpenTelemetry, PostgreSQL, RabbitMQ, Docker Compose
 oraz przechowywanie logów i trace'ów w S3 (RustFS) przez Rootprint.
 
 Domena (`Orders`) i API są celowo banalne — służą tylko do generowania ruchu.
@@ -10,6 +10,10 @@ Domena (`Orders`) i API są celowo banalne — służą tylko do generowania ruc
                     ┌──────────── /metrics (scrape co 5 s) ───────────┐
                     │                                                 ▼
  k6 / curl ──▶  app (.NET 10) ──SQL──▶ PostgreSQL              Prometheus ──▶ Grafana
+                    │  ▲                                              ▲
+                    │  └─ consumer ◀──┐                               │ :15692 (broker + per-queue)
+                    └── producer ──AMQP──▶ RabbitMQ ──────────────────┘
+                    │
                     │                                                 ▲ exemplars (trace_id)
                     └── OTLP (logi + trace'y) ──▶ otel-collector       │
                                                      │                 │ "Open trace in Rootprint"
@@ -19,7 +23,8 @@ Domena (`Orders`) i API są celowo banalne — służą tylko do generowania ruc
                                                  Quickwit ── S3 API ──▶ RustFS (bucket observability-logs)
 ```
 
-Trace w aplikacji: **HTTP request → `Mediator <Message>` → `<Handler>` → PostgreSQL (span z treścią SQL)**.
+Trace w aplikacji: **HTTP request → `Mediator <Message>` → `<Handler>` → PostgreSQL (span z treścią SQL)**,
+a dla wiadomości: **HTTP request → `publish lab.message` → `deliver lab.message`** (kontekst trace'a jedzie w nagłówkach wiadomości).
 
 ---
 
@@ -31,7 +36,7 @@ Trace w aplikacji: **HTTP request → `Mediator <Message>` → `<Handler>` → P
 | .NET SDK | 10.0 | uruchomienie lokalne i testy |
 | k6 | opcjonalnie | generowanie ruchu (`k6/`) |
 
-Testy integracyjne uruchamiają PostgreSQL przez Testcontainers — potrzebny działający Docker.
+Testy integracyjne uruchamiają PostgreSQL i RabbitMQ przez Testcontainers — potrzebny działający Docker.
 
 ## 2. Uruchomienie Docker Compose (zalecane)
 
@@ -41,10 +46,10 @@ i na koniec wypisuje wszystkie adresy:
 ```bash
 ./start.sh                 # start całości
 ./start.sh --b             # przebudowa obrazu aplikacji
-./start.sh --expose        # + PostgreSQL 5432, OTLP 4317/4318, Quickwit 7280 na hoście (docker-compose.dev.yml)
+./start.sh --expose        # + PostgreSQL 5432, RabbitMQ 5672, OTLP 4317/4318, Quickwit 7280 na hoście (docker-compose.dev.yml)
 ./start.sh --logs [svc]    # logi (domyślnie app), np. --logs rootprint
 ./start.sh --status        # stan kontenerów
-./start.sh --traffic       # ruch k6 | --problems: ruch z random problems
+./start.sh --traffic       # ruch k6 | --problems: ruch z random problems | --messages: ruch RabbitMQ
 ./start.sh --sa            # zatrzymaj tylko app (np. przed dotnet run)
 ./start.sh --stop          # down (dane zostają) | --clean: down -v (usuwa dane)
 ./start.sh --help
@@ -80,6 +85,8 @@ docker compose stop app                     # opcjonalnie - żeby nie było dwó
 set -a; source .env; set +a
 dotnet user-secrets --project src/ObservabilityLab set "ConnectionStrings:Orders" \
   "Host=localhost;Port=5432;Database=$POSTGRES_DB;Username=$POSTGRES_USER;Password=$POSTGRES_PASSWORD"
+dotnet user-secrets --project src/ObservabilityLab set "ConnectionStrings:RabbitMq" \
+  "amqp://$RABBITMQ_USER:$RABBITMQ_PASSWORD@localhost:5672/"
 
 dotnet run --project src/ObservabilityLab   # http://localhost:5253, środowisko Development
 ```
@@ -99,10 +106,12 @@ Profil nasłuchuje na `0.0.0.0:5253`, żeby Prometheus w kontenerze mógł się 
 | **Grafana** | http://localhost:3000 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | **Prometheus** | http://localhost:9090 (targets: `/targets`) | – |
 | **Rootprint** (logi + trace'y) | http://localhost:8282 | `ROOTPRINT_ADMIN_EMAIL` / `ROOTPRINT_ADMIN_PASSWORD` |
+| **RabbitMQ** – management UI | http://localhost:15672 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
 | **RustFS** – konsola | http://localhost:9001 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` |
 | **RustFS** – S3 API | http://localhost:9000 | jw. |
 | Quickwit UI (tylko dev override) | http://localhost:7280/ui | – |
 | PostgreSQL (tylko dev override) | localhost:5432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
+| RabbitMQ AMQP (tylko dev override) | localhost:5672 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
 
 ### Endpointy aplikacji
 
@@ -112,13 +121,32 @@ Profil nasłuchuje na `0.0.0.0:5253`, żeby Prometheus w kontenerze mógł się 
 | GET | `/api/orders/{orderId}` | pobranie orderu → 200 / 404 |
 | GET | `/api/orders?status=Paid&page=1&pageSize=20` | najnowsze ordery, stronicowane (`items`, `page`, `pageSize`, `hasMore`) → 200 |
 | PUT | `/api/orders/{orderId}/status` | zmiana statusu (`{"status":"Completed"}`) → 200 / 404 |
+| POST | `/api/messages` | producer: publikacja wiadomości (`{"text":"hi","processingMs":200,"fail":false}`) → 202 po potwierdzeniu przez broker |
+| POST | `/api/messages/burst` | producer: `count` wiadomości z `parallelism` równoległych zadań (`{"count":2000,"parallelism":32}`) → 200 |
+| GET | `/api/messages/received?limit=50` | consumer: ostatnio przetworzone wiadomości (outcome, `endToEndMs`, `threadId`) → 200 |
+| GET | `/api/messages/queue` | stan kolejki wg brokera: `ready`, `consumers`, `deadLettered` → 200 |
 | GET | `/health` | liveness (tylko proces) |
-| GET | `/health/ready` | readiness: aplikacja + PostgreSQL (używany przez Docker healthcheck) |
+| GET | `/health/ready` | readiness: aplikacja + PostgreSQL + RabbitMQ (używany przez Docker healthcheck) |
 | GET | `/metrics` | Prometheus / OpenMetrics (z exemplarami) |
 | GET | `/diagnostics/problem/*` | celowe problemy (sekcja 9) |
 | GET/PUT | `/diagnostics/random-problems` | tryb losowych problemów (sekcja 9) |
 
-Statusy: `Created`, `Paid`, `Cancelled`, `Completed`. Błędy zwracane są jako ProblemDetails z polem `traceId`.
+Statusy: `Created`, `Paid`, `Cancelled`, `Completed`. Błędy zwracane są jako ProblemDetails z polem `traceId`
+(broker niedostępny → 503).
+
+### RabbitMQ: producer, consumer i wielowątkowy dostęp do `IChannel`
+
+- `IConnection` jest thread-safe — aplikacja ma **jedno** współdzielone połączenie (`RabbitMqConnection`).
+- `IChannel` **nie jest** thread-safe: równoległe publikacje na jednym kanale mieszają publisher confirms.
+  `PublisherChannelPool` pożycza każdemu wywołującemu kanał na wyłączność (maks. `RABBITMQ_PUBLISHER_CHANNELS`,
+  pozostali czekają — metryka `lab_rabbitmq_publisher_channel_wait_seconds`) i używa kanałów ponownie
+  zamiast otwierać kanał na każdą publikację. Test `Channel_pool_never_lends_one_channel_to_two_callers_at_once` to sprawdza.
+- Kanały publishera mają włączone **publisher confirms**: `POST /api/messages` wraca dopiero po potwierdzeniu przez broker,
+  a wiadomość nie do zroutowania (`mandatory: true`) kończy się błędem zamiast zniknąć.
+- Consumer (`MessageConsumer`, `BackgroundService`) ma własny kanał z `ConsumerDispatchConcurrency` =
+  `RABBITMQ_CONSUMER_CONCURRENCY` (handlery równolegle na thread poolu) i prefetch `RABBITMQ_PREFETCH`.
+  Sukces → ack, wyjątek → nack bez requeue → `lab.messages.dead` (dead-letter queue, max 10 000).
+- Kolejki są typu quorum; po restarcie brokera klient sam odtwarza połączenie, kanały, topologię i consumera.
 
 ## 8. Jak zobaczyć logi
 
@@ -187,6 +215,8 @@ k6 run k6/orders.js                          # zwykły ruch (create/get/list/sta
 k6 run -e VUS=30 -e DURATION=10m k6/orders.js
 k6 run k6/problems.js                        # włącza random problems + co 10 s losowy /diagnostics/problem/*,
                                              # na koniec wyłącza random problems i zwalnia pamięć
+k6 run k6/messages.js                        # RabbitMQ: pojedyncze publikacje (część wolnych, ~3% z fail -> DLQ)
+                                             # + co ~20 s burst 1000 wiadomości z 32 wątków
 ```
 
 `BASE_URL` domyślnie `http://localhost:8080` (dla `dotnet run`: `-e BASE_URL=http://localhost:5253`).
@@ -207,7 +237,12 @@ albo `traceId` z odpowiedzi ProblemDetails (`00-<traceId>-<spanId>-01`).
 ## 11. Jak zobaczyć metryki
 
 - **Grafana** – dashboard w sekcjach: *System / Runtime*, *HTTP*, *PostgreSQL*, *Application (Orders)*,
-  *Where to look next*. Dashboard i datasource są provisionowane z `deploy/grafana/` – nic nie trzeba klikać.
+  *Messaging (RabbitMQ)*, *Where to look next*.
+- **Grafana → RabbitMQ queue (Observability Lab)** – osobny dashboard tylko dla kolejki (link w nagłówku głównego):
+  *Broker* (połączenia, kanały, głębokość kolejki ready/unacked, message rates, consumer utilisation, pamięć),
+  *Producer* (publish/s, latencja z confirmem, pula kanałów: in use vs size, czas czekania na kanał),
+  *Consumer* (consumed/s wg outcome, in-flight, czas przetwarzania, end-to-end, dead-letter queue).
+  Metryki brokera pochodzą z pluginu Prometheus RabbitMQ (`rabbitmq:15692`, joby `rabbitmq` i `rabbitmq-queues`). Dashboard i datasource są provisionowane z `deploy/grafana/` – nic nie trzeba klikać.
 - **Prometheus** – http://localhost:9090, np.:
 
 ```promql
@@ -266,15 +301,17 @@ Ręcznie: `dotnet husky install`, `dotnet husky run --group pre-commit`. Wyłąc
 ```text
 src/ObservabilityLab/
   Program.cs                   kolejność rejestracji, middleware i mapowania - bez szczegółów
-  Hosting/                     extension methods: dane (Npgsql/Dapper), Mediator, HTTP API + OpenAPI, health, logi + OpenTelemetry
+  Hosting/                     extension methods: dane (Npgsql/Dapper), Mediator, RabbitMQ, HTTP API + OpenAPI, health, logi + OpenTelemetry
   Api/                         stałe tras, tagi OpenAPI, wspólne kody błędów, SliceResponse
   Endpoints/MapEndpoints.cs    jedno miejsce rejestracji wszystkich endpointów
   Endpoints/Orders/            Endpoint.cs (grupa + tag) + Maps/Map<Verb>.cs (jedna operacja = jeden plik), OrderResponse
   Orders/                      model, komendy/zapytania + handlery Mediatora (Dapper)
+  Messaging/                   RabbitMQ: połączenie, pula kanałów publishera, producer, consumer (BackgroundService), topologia
+  Endpoints/Messages/          publish, burst, received, queue
   Diagnostics/                 celowe problemy + random problems
   Telemetry/                   ActivitySource/Meter, Mediator tracing behavior, health -> metryka
-tests/ObservabilityLab.Tests/  testy HTTP (WebApplicationFactory + Testcontainers) i random problems
-deploy/                        konfiguracje: grafana, prometheus, otel-collector, rootprint (+quickwit), rustfs, postgres
+tests/ObservabilityLab.Tests/  testy HTTP (WebApplicationFactory + Testcontainers: PostgreSQL, RabbitMQ), pula kanałów, random problems
+deploy/                        konfiguracje: grafana (2 dashboardy), prometheus, otel-collector, rootprint (+quickwit), rustfs, postgres
 k6/                            skrypty ruchu
 ```
 
