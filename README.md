@@ -105,6 +105,7 @@ Profil nasłuchuje na `0.0.0.0:5253`, żeby Prometheus w kontenerze mógł się 
 | Aplikacja – metryki | http://localhost:8080/metrics | – |
 | **Grafana** | http://localhost:3000 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | **Prometheus** | http://localhost:9090 (targets: `/targets`) | – |
+| postgres-exporter (w sieci compose) | `postgres-exporter:9187/metrics` | `POSTGRES_EXPORTER_PASSWORD` (rola `postgres_exporter`) |
 | **Rootprint** (logi + trace'y) | http://localhost:8282 | `ROOTPRINT_ADMIN_EMAIL` / `ROOTPRINT_ADMIN_PASSWORD` |
 | **RabbitMQ** – management UI | http://localhost:15672 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
 | **RustFS** – konsola | http://localhost:9001 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` |
@@ -262,7 +263,13 @@ albo `traceId` z odpowiedzi ProblemDetails (`00-<traceId>-<spanId>-01`).
   *Producer* (publish/s, latencja z confirmem, pula kanałów: in use vs size, czas czekania na kanał),
   *Consumer* (consumed/s wg outcome, in-flight, czas przetwarzania, end-to-end, dead-letter queue),
   *Emails* (publish/s wg routing key, consumed/s i głębokość per kolejka `q.emails.*`, średni fan-out „copies per email”).
-  Metryki brokera pochodzą z pluginu Prometheus RabbitMQ (`rabbitmq:15692`, joby `rabbitmq` i `rabbitmq-queues`). Dashboard i datasource są provisionowane z `deploy/grafana/` – nic nie trzeba klikać.
+  Metryki brokera pochodzą z pluginu Prometheus RabbitMQ (`rabbitmq:15692`, joby `rabbitmq` i `rabbitmq-queues`).
+- **Grafana → PostgreSQL (Observability Lab)** – dashboard tylko dla bazy, pisany „po ludzku” (opisy przy panelach, sekcja *How to read*):
+  *At a glance* (UP/DOWN, wersja, uptime, rozmiar bazy, % zajętych połączeń, cache hit, transakcje/s, % udanych transakcji,
+  udane / nieudane SQL z aplikacji, deadlocki), *Transactions* (commit vs rollback), *SQL from the app* (OK vs failed, latencja z exemplarami),
+  *Connections* (wg stanu i użytkownika, pula Npgsql), *Rows, cache*, *Locks and long transactions*, *Tables* (wiersze, dead rows, rozmiar,
+  seq vs index scans, ostatni autovacuum) i *Top queries* z `pg_stat_statements` (treść zapytania, wywołania, czas łączny i średni).
+  Serwer: `postgres-exporter` (job `postgres`, rola tylko do odczytu `postgres_exporter` z `pg_monitor`); aplikacja: metryki klienta Npgsql. Dashboardy i datasource są provisionowane z `deploy/grafana/` – nic nie trzeba klikać.
 - **Prometheus** – http://localhost:9090, np.:
 
 ```promql
@@ -285,6 +292,16 @@ sum by (http_route) (rate(http_server_request_duration_seconds_count{http_respon
 Źródła metryk: ASP.NET Core (`http_server_*`, `kestrel_*`, `aspnetcore_diagnostics_exceptions_total`),
 runtime .NET (`dotnet_*`), Npgsql (`db_client_*`), aplikacja (`lab_orders_*`, `lab_problems_injected_total`,
 `lab_health_status`, `lab_process_memory_limit_bytes`).
+
+### PostgreSQL: `pg_stat_statements` i rola monitoringu na istniejącym wolumenie
+
+`deploy/postgres/init-monitoring.sh` (rola `postgres_exporter` + `CREATE EXTENSION pg_stat_statements`) wykonuje się sam tylko przy pustym wolumenie.
+Jeśli baza istniała wcześniej, po `docker compose up -d` uruchom go raz ręcznie:
+
+```bash
+docker compose exec postgres sh /docker-entrypoint-initdb.d/20-monitoring.sh
+docker compose restart postgres-exporter
+```
 
 ## 12. Zatrzymanie środowiska
 
@@ -332,7 +349,7 @@ src/ObservabilityLab/
   Diagnostics/                 celowe problemy + random problems
   Telemetry/                   ActivitySource/Meter, Mediator tracing behavior, health -> metryka
 tests/ObservabilityLab.Tests/  testy HTTP (WebApplicationFactory + Testcontainers: PostgreSQL, RabbitMQ), pula kanałów, random problems
-deploy/                        konfiguracje: grafana (2 dashboardy), prometheus, otel-collector, rootprint (+quickwit), rustfs, postgres
+deploy/                        konfiguracje: grafana (3 dashboardy), prometheus, otel-collector, rootprint (+quickwit), rustfs, postgres
 k6/                            skrypty ruchu
 ```
 

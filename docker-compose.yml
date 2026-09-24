@@ -3,6 +3,7 @@
 #   app ──/metrics──▶ prometheus ──▶ grafana
 #    │                   ▲
 #    ├──AMQP──▶ rabbitmq ┘ (:15692 broker + per-queue metrics)
+#    ├──SQL───▶ postgres ◀── postgres-exporter (:9187) ──▶ prometheus
 #    │
 #    └──OTLP (logs + traces)──▶ otel-collector ──▶ rootprint ──▶ quickwit ──S3 API──▶ rustfs
 #
@@ -57,14 +58,25 @@ services:
   postgres:
     image: postgres:17
     restart: unless-stopped
+    # pg_stat_statements must be preloaded (needs a restart); track_io_timing adds read/write time per query.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - track_io_timing=on
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-lab}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-orders}
       ROOTPRINT_DB_PASSWORD: ${ROOTPRINT_DB_PASSWORD:?set ROOTPRINT_DB_PASSWORD in .env}
+      POSTGRES_EXPORTER_PASSWORD: ${POSTGRES_EXPORTER_PASSWORD:?set POSTGRES_EXPORTER_PASSWORD in .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./deploy/postgres/init-rootprint-db.sh:/docker-entrypoint-initdb.d/10-rootprint.sh:ro
+      - ./deploy/postgres/init-monitoring.sh:/docker-entrypoint-initdb.d/20-monitoring.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -91,6 +103,27 @@ services:
       retries: 12
 
   # --- Metrics -------------------------------------------------------------------------------
+  # Server-side PostgreSQL metrics (transactions, connections, locks, tables, pg_stat_statements).
+  # The app's own view of its SQL (Npgsql client metrics) comes from /metrics of the app.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - --collector.stat_statements
+      - --collector.stat_statements.include_query
+      - --collector.stat_statements.query_length=200
+      - --collector.stat_statements.limit=50
+      - --collector.long_running_transactions
+      - --collector.stat_activity_autovacuum
+      - --collector.postmaster
+    environment:
+      DATA_SOURCE_URI: postgres:5432/${POSTGRES_DB:-orders}?sslmode=disable
+      DATA_SOURCE_USER: postgres_exporter
+      DATA_SOURCE_PASS: ${POSTGRES_EXPORTER_PASSWORD:?set POSTGRES_EXPORTER_PASSWORD in .env}
+
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped

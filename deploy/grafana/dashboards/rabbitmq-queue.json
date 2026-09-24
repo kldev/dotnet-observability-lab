@@ -18,6 +18,15 @@
   "version": 1,
   "links": [
     {
+      "title": "PostgreSQL",
+      "type": "link",
+      "url": "/d/observability-lab-postgres",
+      "targetBlank": false,
+      "icon": "dashboard",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
       "title": "Observability Lab (.NET 10)",
       "type": "link",
       "url": "/d/observability-lab",

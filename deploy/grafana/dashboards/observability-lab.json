@@ -46,6 +46,15 @@
       "url": "http://localhost:15672",
       "targetBlank": true,
       "icon": "external link"
+    },
+    {
+      "title": "PostgreSQL",
+      "type": "link",
+      "url": "/d/observability-lab-postgres",
+      "targetBlank": false,
+      "icon": "dashboard",
+      "keepTime": true,
+      "includeVars": true
     }
   ],
   "templating": {
@@ -2196,7 +2205,7 @@
     },
     {
       "type": "row",
-      "title": "PostgreSQL (Npgsql client metrics)",
+      "title": "PostgreSQL (Npgsql client metrics) - server side on the PostgreSQL dashboard",
       "id": 32,
       "collapsed": false,
       "gridPos": {
