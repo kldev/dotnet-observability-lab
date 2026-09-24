@@ -93,7 +93,7 @@ Profil nasłuchuje na `0.0.0.0:5253`, żeby Prometheus w kontenerze mógł się 
 | --- | --- | --- |
 | POST | `/api/orders` | utworzenie orderu (`{"customerName":"Jan","totalAmount":12.5}`) → 201 |
 | GET | `/api/orders/{orderId}` | pobranie orderu → 200 / 404 |
-| GET | `/api/orders?status=Paid&limit=20` | najnowsze ordery → 200 |
+| GET | `/api/orders?status=Paid&page=1&pageSize=20` | najnowsze ordery, stronicowane (`items`, `page`, `pageSize`, `hasMore`) → 200 |
 | PUT | `/api/orders/{orderId}/status` | zmiana statusu (`{"status":"Completed"}`) → 200 / 404 |
 | GET | `/health` | liveness (tylko proces) |
 | GET | `/health/ready` | readiness: aplikacja + PostgreSQL (używany przez Docker healthcheck) |
@@ -139,7 +139,7 @@ curl "$B/memory?mb=150"           # alokacja i trzymanie pamięci (kumuluje się
 curl "$B/memory/release"          # zwolnienie pamięci
 ```
 
-Wszystko jest też klikalne w Scalar: http://localhost:8080/docs (tag *Lab - Diagnostics*).
+Endpointy diagnostyczne są celowo poza dokumentem OpenAPI/Scalar (to narzędzia labu, nie API) — wywołuj je curl/k6/przeglądarką.
 
 ### Random problems
 
@@ -242,8 +242,10 @@ dotnet csharpier check .         # formatowanie (CSharpier)
 ```text
 src/ObservabilityLab/
   Program.cs                   konfiguracja: Npgsql, Mediator, OpenTelemetry, logowanie, health, OpenAPI
-  Api/                         stałe tras, tagi OpenAPI, wspólne kody błędów
-  Orders/                      model, komendy/zapytania + handlery (Dapper), endpointy
+  Api/                         stałe tras, tagi OpenAPI, wspólne kody błędów, SliceResponse
+  Endpoints/MapEndpoints.cs    jedno miejsce rejestracji wszystkich endpointów
+  Endpoints/Orders/            Endpoint.cs (grupa + tag) + Maps/Map<Verb>.cs (jedna operacja = jeden plik), OrderResponse
+  Orders/                      model, komendy/zapytania + handlery Mediatora (Dapper)
   Diagnostics/                 celowe problemy + random problems
   Telemetry/                   ActivitySource/Meter, Mediator tracing behavior, health -> metryka
 tests/ObservabilityLab.Tests/  testy HTTP (WebApplicationFactory + Testcontainers) i random problems
@@ -261,6 +263,9 @@ k6/                            skrypty ruchu
   który powstaje dopiero przy pierwszym starcie (`rootprint-bootstrap`). Collector dodatkowo batchuje i ponawia wysyłkę.
 - **Jeden PostgreSQL** dla aplikacji (`orders`) i dla metadanych Rootprint (`rootprint`).
 - `curlimages/curl` wystarcza do utworzenia bucketu (S3 SigV4) i bootstrapu Rootprint — bez dodatkowych CLI.
-- Endpointy diagnostyczne to celowo `GET` (łatwe do wywołania z przeglądarki/k6), mapowane tylko gdy są włączone.
+- Endpointy diagnostyczne to celowo `GET` (łatwe do wywołania z przeglądarki/k6), mapowane tylko gdy są włączone i wyłączone z dokumentu OpenAPI.
+- Kontrakt HTTP wg standardu .NET 10: trasy jako stałe (`ApiRoutes`), `/api/<zasoby>` z `{orderId:guid}`, `TypedResults`,
+  `WithName`/`WithSummary`/`Produces`, tagi z opisami, OpenAPI (`/openapi/v1.json`) + Scalar, walidacja wbudowana w .NET 10 (`AddValidation`).
+  Bez wersjonowania — jedyny konsument jest wdrażany razem z API (dokument i tak nazywa się `v1`).
 - Health checki z Dockera i `/metrics` są wyłączone z tracingu (szum); stan health jest metryką `lab_health_status`.
 - Brak auth, Kubernetes, kolejek itp. — to lokalny playground.

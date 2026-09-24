@@ -7,7 +7,7 @@ using Npgsql;
 using ObservabilityLab;
 using ObservabilityLab.Api;
 using ObservabilityLab.Diagnostics;
-using ObservabilityLab.Orders;
+using ObservabilityLab.Endpoints;
 using ObservabilityLab.Telemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -78,7 +78,7 @@ builder.Services.AddOpenApi(
                 document.Info.Description = """
                     A deliberately small Orders API that exists to generate logs, metrics and traces
                     for the observability stack (Prometheus, Grafana, Rootprint on RustFS/S3).
-                    Diagnostics operations break things on purpose.
+                    Problem-injection endpoints (/diagnostics/*) are lab tools and are not part of this document.
                     """;
                 return Task.CompletedTask;
             }
@@ -184,10 +184,7 @@ app.MapOpenApi(); // /openapi/v1.json
 app.MapScalarApiReference("/docs", o => o.Title = "Observability Lab API");
 
 app.MapGet("/", () => TypedResults.Redirect("/docs")).ExcludeFromDescription();
-app.MapOrderEndpoints();
-
-if (app.Environment.IsDevelopment() || app.Configuration.GetValue("DIAGNOSTICS_ENABLED", false))
-    app.MapProblemEndpoints();
+app.MapLabEndpoints();
 
 app.Run();
 

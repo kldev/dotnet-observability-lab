@@ -28,6 +28,7 @@ public static class Database
                         status        text          NOT NULL
                     );
                     CREATE INDEX IF NOT EXISTS ix_orders_created_at ON orders (created_at DESC);
+                    CREATE INDEX IF NOT EXISTS ix_orders_status_created_at ON orders (status, created_at DESC);
                     """
                 );
                 logger.LogInformation("Database schema ready");

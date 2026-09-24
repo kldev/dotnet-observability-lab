@@ -65,7 +65,7 @@ export default function () {
     }
 
     if (Math.random() < 0.3) {
-      check(http.get(`${BASE_URL}/api/orders?limit=20`), { 'list -> 200': (r) => r.status === 200 });
+      check(http.get(`${BASE_URL}/api/orders?pageSize=20`), { 'list -> 200': (r) => r.status === 200 });
     }
   }
 

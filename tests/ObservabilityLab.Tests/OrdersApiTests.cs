@@ -3,8 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ObservabilityLab.Api;
+using ObservabilityLab.Endpoints.Orders;
 using ObservabilityLab.Orders;
-using static ObservabilityLab.Orders.OrderEndpoints;
+using static ObservabilityLab.Endpoints.Orders.Maps.MapChangeStatus;
+using static ObservabilityLab.Endpoints.Orders.Maps.MapCreate;
 
 namespace ObservabilityLab.Tests;
 
@@ -91,12 +93,12 @@ public sealed class OrdersApiTests(LabFactory factory) : IClassFixture<LabFactor
         var updated = await response.Content.ReadFromJsonAsync<OrderResponse>(Json);
         Assert.Equal(OrderStatus.Completed, updated?.Status);
 
-        var completed = await _client.GetFromJsonAsync<List<OrderResponse>>(
-            $"{ApiRoutes.Orders.List}?status=Completed",
+        var completed = await _client.GetFromJsonAsync<SliceResponse<OrderResponse>>(
+            $"{ApiRoutes.Orders.Slice}?status=Completed",
             Json
         );
         Assert.NotNull(completed);
-        Assert.Contains(completed, o => o.Id == created.Id);
+        Assert.Contains(completed.Items, o => o.Id == created.Id);
     }
 
     [Theory]
@@ -130,22 +132,51 @@ public sealed class OrdersApiTests(LabFactory factory) : IClassFixture<LabFactor
     [Theory]
     [InlineData("?status=7")]
     [InlineData("?status=Shipped")]
-    [InlineData("?limit=0")]
-    [InlineData("?limit=501")]
+    [InlineData("?pageSize=0")]
+    [InlineData("?pageSize=501")]
+    [InlineData("?page=0")]
     public async Task List_orders_with_invalid_query_returns_400(string query)
     {
-        var response = await _client.GetAsync(ApiRoutes.Orders.List + query);
+        var response = await _client.GetAsync(ApiRoutes.Orders.Slice + query);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
-    public async Task OpenApi_document_describes_order_operations()
+    public async Task List_orders_pages_newest_first()
+    {
+        var older = await CreateOrderAsync("Paging older", 1m);
+        var newer = await CreateOrderAsync("Paging newer", 2m);
+
+        var first = await _client.GetFromJsonAsync<SliceResponse<OrderResponse>>(
+            $"{ApiRoutes.Orders.Slice}?page=1&pageSize=1",
+            Json
+        );
+        var second = await _client.GetFromJsonAsync<SliceResponse<OrderResponse>>(
+            $"{ApiRoutes.Orders.Slice}?page=2&pageSize=1",
+            Json
+        );
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.True(first.HasMore);
+        Assert.Single(first.Items);
+        Assert.Single(second.Items);
+        // Other tests add orders concurrently, so only the relative order of this test's orders is asserted.
+        Assert.NotEqual(first.Items[0].Id, second.Items[0].Id);
+        Assert.True(first.Items[0].CreatedAt >= second.Items[0].CreatedAt);
+        Assert.NotEqual(older.Id, newer.Id);
+    }
+
+    [Fact]
+    public async Task OpenApi_document_describes_orders_and_hides_diagnostics()
     {
         var document = await _client.GetStringAsync("/openapi/v1.json");
 
         Assert.Contains("\"operationId\": \"Create order\"", document);
+        Assert.Contains("\"operationId\": \"Get orders\"", document);
         Assert.Contains("Sales - Orders", document);
+        Assert.DoesNotContain(ApiRoutes.Diagnostics.Problem, document);
     }
 
     [Theory]

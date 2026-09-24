@@ -12,7 +12,10 @@ public sealed record CreateOrder(string CustomerName, decimal TotalAmount) : ICo
 
 public sealed record GetOrder(Guid Id) : IQuery<Order?>;
 
-public sealed record GetOrders(OrderStatus? Status, int Limit) : IQuery<IReadOnlyList<Order>>;
+/// <summary>Newest orders first, one page at a time. <paramref name="Page"/> is 1-based.</summary>
+public sealed record GetOrders(OrderStatus? Status, int Page, int PageSize) : IQuery<OrdersSlice>;
+
+public sealed record OrdersSlice(IReadOnlyList<Order> Items, bool HasMore);
 
 public sealed record ChangeOrderStatus(Guid Id, OrderStatus Status) : ICommand<Order?>;
 
@@ -92,9 +95,9 @@ public sealed class GetOrderHandler(NpgsqlDataSource db, RandomProblems problems
 }
 
 public sealed class GetOrdersHandler(NpgsqlDataSource db, RandomProblems problems)
-    : IQueryHandler<GetOrders, IReadOnlyList<Order>>
+    : IQueryHandler<GetOrders, OrdersSlice>
 {
-    public async ValueTask<IReadOnlyList<Order>> Handle(GetOrders query, CancellationToken ct)
+    public async ValueTask<OrdersSlice> Handle(GetOrders query, CancellationToken ct)
     {
         using var activity = LabTelemetry.Source.StartActivity(nameof(GetOrdersHandler));
 
@@ -103,15 +106,25 @@ public sealed class GetOrdersHandler(NpgsqlDataSource db, RandomProblems problem
         var orders = await conn.QueryAsync<Order>(
             new CommandDefinition(
                 OrderSql.Select
-                    + " WHERE (@Status::text IS NULL OR status = @Status) ORDER BY created_at DESC LIMIT @Limit",
-                new { Status = query.Status?.ToString(), query.Limit },
+                    + " WHERE (@Status::text IS NULL OR status = @Status) ORDER BY created_at DESC LIMIT @Take OFFSET @Skip",
+                new
+                {
+                    Status = query.Status?.ToString(),
+                    // One extra row tells whether another page exists - no COUNT(*) needed.
+                    Take = query.PageSize + 1,
+                    Skip = (query.Page - 1) * query.PageSize,
+                },
                 cancellationToken: ct
             )
         );
 
         var list = orders.AsList();
+        var hasMore = list.Count > query.PageSize;
+        if (hasMore)
+            list.RemoveAt(list.Count - 1);
+
         activity?.SetTag("orders.count", list.Count);
-        return list;
+        return new OrdersSlice(list, hasMore);
     }
 }
 

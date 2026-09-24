@@ -10,7 +10,7 @@ internal static class ApiRoutes
         public const string Base = $"{ApiRoutes.Base}/orders";
 
         public const string Create = Base;
-        public const string List = Base;
+        public const string Slice = Base;
         public const string Get = $"{Base}/{{orderId:guid}}";
         public const string ChangeStatus = $"{Base}/{{orderId:guid}}/status";
 

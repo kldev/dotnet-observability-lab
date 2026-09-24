@@ -24,7 +24,7 @@ public static class ProblemEndpoints
         var logger = app
             .ServiceProvider.GetRequiredService<ILoggerFactory>()
             .CreateLogger("ObservabilityLab.Diagnostics");
-        var problem = app.MapGroup(ApiRoutes.Diagnostics.Problem).WithTags(ApiTags.Diagnostics);
+        var problem = app.MapGroup(ApiRoutes.Diagnostics.Problem).ExcludeFromDescription();
 
         problem
             .MapGet(
@@ -216,8 +216,7 @@ public static class ProblemEndpoints
             .WithName("Release memory")
             .WithSummary("Release memory held by the memory problem");
 
-        var random = app.MapGroup(ApiRoutes.Diagnostics.RandomProblems)
-            .WithTags(ApiTags.Diagnostics);
+        var random = app.MapGroup(ApiRoutes.Diagnostics.RandomProblems).ExcludeFromDescription();
 
         // GET /diagnostics/random-problems - current random problems settings
         random

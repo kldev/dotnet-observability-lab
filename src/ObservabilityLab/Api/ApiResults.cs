@@ -1,10 +1,13 @@
+using Microsoft.AspNetCore.Mvc;
+
 namespace ObservabilityLab.Api;
 
 internal static class ApiResults
 {
-    /// <summary>Error responses shared by the API operations (all returned as ProblemDetails with traceId).</summary>
+    /// <summary>Errors every API operation can return, all as ProblemDetails (with traceId). No auth in this lab, so no 401/403.</summary>
     public static RouteHandlerBuilder ProducesStandardErrors(this RouteHandlerBuilder builder) =>
         builder
-            .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status500InternalServerError);
+            .Produces<HttpValidationProblemDetails>(StatusCodes.Status400BadRequest)
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound)
+            .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError);
 }
