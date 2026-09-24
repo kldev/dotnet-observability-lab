@@ -67,6 +67,51 @@ public sealed class EmailsApiTests(LabFactory factory) : IClassFixture<LabFactor
         Assert.All(received, r => Assert.Equal("Offer", r.Text));
     }
 
+    [Fact]
+    public async Task Slow_queue_does_not_hold_up_the_other_queues()
+    {
+        // 8 slow support emails keep q.emails.support and q.emails.audit busy for a few seconds
+        // (8 x 1.5 s at concurrency 4 = 3 s each).
+        await Task.WhenAll(
+            Enumerable
+                .Range(0, 8)
+                .Select(_ =>
+                    _client.PostAsJsonAsync(
+                        ApiRoutes.Emails.Publish,
+                        new PublishEmailRequest(
+                            EmailDepartment.Support,
+                            "slow",
+                            ProcessingMs: 1500
+                        ),
+                        Json
+                    )
+                )
+        );
+
+        var response = await _client.PostAsJsonAsync(
+            ApiRoutes.Emails.Publish,
+            new PublishEmailRequest(EmailDepartment.Sales, "fast"),
+            Json
+        );
+        var published = await response.Content.ReadFromJsonAsync<PublishedEmailResponse>(Json);
+
+        // q.emails.sales has a channel of its own, so its copy is processed right away.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        ReceivedMessageResponse? sales = null;
+        while (sales is null)
+        {
+            sales = (await ReceivedAsync(published!.Id, timeout.Token)).FirstOrDefault(r =>
+                r.Queue == "q.emails.sales"
+            );
+            if (sales is null)
+                await Task.Delay(50, timeout.Token);
+        }
+        Assert.True(
+            sales.EndToEndMs < 1000,
+            $"sales copy took {sales.EndToEndMs} ms behind the slow support queue"
+        );
+    }
+
     [Theory]
     [InlineData("recruitment.*", "recruitment.normal", true)]
     [InlineData("recruitment.*", "recruitment", false)]

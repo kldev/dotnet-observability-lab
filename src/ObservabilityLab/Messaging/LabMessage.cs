@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace ObservabilityLab.Messaging;
 
 /// <summary>
@@ -43,28 +45,26 @@ public sealed record ReceivedMessage(
 );
 
 /// <summary>The last messages the consumer finished with - shows the consumer side without a database.</summary>
+/// <remarks>
+/// Lock-free: consumer handlers of every queue add concurrently and never wait for each other or for a reader.
+/// Under contention the queue can briefly hold a few more than <see cref="Capacity"/> items.
+/// </remarks>
 public sealed class ReceivedMessages
 {
     public const int Capacity = 200;
 
-    private readonly Lock _lock = new();
-    private readonly Queue<ReceivedMessage> _items = new(Capacity);
+    private readonly ConcurrentQueue<ReceivedMessage> _items = new();
 
-    // Called concurrently by consumer handlers (ConsumerConcurrency > 1).
     public void Add(ReceivedMessage message)
     {
-        lock (_lock)
-        {
-            if (_items.Count == Capacity)
-                _items.Dequeue();
-            _items.Enqueue(message);
-        }
+        _items.Enqueue(message);
+        while (_items.Count > Capacity && _items.TryDequeue(out _)) { }
     }
 
     /// <summary>Newest first.</summary>
     public IReadOnlyList<ReceivedMessage> Latest(int limit)
     {
-        lock (_lock)
-            return [.. _items.Reverse().Take(limit)];
+        var snapshot = _items.ToArray(); // oldest first, a consistent moment-in-time copy
+        return [.. snapshot.AsEnumerable().Reverse().Take(limit)];
     }
 }

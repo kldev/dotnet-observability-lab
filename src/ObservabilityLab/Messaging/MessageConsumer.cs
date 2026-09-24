@@ -10,9 +10,10 @@ namespace ObservabilityLab.Messaging;
 
 /// <summary>
 /// Consumer: processes messages from <see cref="MessagingTopology.ConsumedQueues"/> (lab.messages and
-/// the q.emails.* queues) on one channel, with up to
-/// <see cref="RabbitMqOptions.ConsumerConcurrency"/> handlers in parallel. Acks on success,
-/// rejects to the dead-letter queue on failure. Unacked messages go back to the queue when the app stops.
+/// the q.emails.* queues). Every queue has a channel of its own with up to
+/// <see cref="RabbitMqOptions.ConsumerConcurrency"/> handlers in parallel, so a slow queue cannot take
+/// the handler slots of the others. Acks on success, rejects to the dead-letter queue on failure.
+/// Unacked messages go back to the queue when the app stops.
 /// </summary>
 public sealed class MessageConsumer(
     RabbitMqConnection rabbit,
@@ -25,55 +26,45 @@ public sealed class MessageConsumer(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var settings = options.Value;
-        await using var channel = await OpenChannelAsync(settings, stoppingToken);
-        await channel.BasicQosAsync(0, (ushort)settings.Prefetch, global: false, stoppingToken);
+        var connection = await ConnectAsync(stoppingToken);
 
-        // One consumer per queue, all on this channel: they share its dispatch concurrency,
-        // prefetch applies to each of them.
-        foreach (var queue in MessagingTopology.ConsumedQueues)
-        {
-            var consumer = new AsyncEventingBasicConsumer(channel);
-            consumer.ReceivedAsync += (_, delivery) =>
-                HandleAsync(channel, queue, delivery, stoppingToken);
-            await channel.BasicConsumeAsync(queue, autoAck: false, consumer, stoppingToken);
-        }
-        logger.LogInformation(
-            "Consuming {Queues} with concurrency {Concurrency}, prefetch {Prefetch}",
-            MessagingTopology.ConsumedQueues,
-            settings.ConsumerConcurrency,
-            settings.Prefetch
-        );
-
+        // Channels are opened concurrently - each is a round trip to the broker.
+        var consuming = MessagingTopology
+            .ConsumedQueues.Select(queue =>
+                ConsumeAsync(connection, queue, settings, stoppingToken)
+            )
+            .ToArray();
         try
         {
+            await Task.WhenAll(consuming);
+            logger.LogInformation(
+                "Consuming {Queues}, one channel each: concurrency {Concurrency}, prefetch {Prefetch}",
+                MessagingTopology.ConsumedQueues,
+                settings.ConsumerConcurrency,
+                settings.Prefetch
+            );
             await Task.Delay(Timeout.InfiniteTimeSpan, time, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // App is stopping - closing the channel hands unacked messages back to the broker.
+            // App is stopping - closing the channels hands unacked messages back to the broker.
+        }
+        finally
+        {
+            foreach (var channel in consuming.Where(c => c.IsCompletedSuccessfully))
+                await (await channel).DisposeAsync();
         }
     }
 
-    private async Task<IChannel> OpenChannelAsync(RabbitMqOptions settings, CancellationToken ct)
+    private async Task<IConnection> ConnectAsync(CancellationToken ct)
     {
         // The broker may still be starting (docker compose, local run) - keep trying; after the first
-        // connect the client's automatic recovery restores the channel and this consumer by itself.
+        // connect the client's automatic recovery restores the channels and consumers by itself.
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                var connection = await rabbit.GetAsync(ct);
-                // Dispatch concurrency > 1: the client runs ReceivedAsync handlers in parallel on the thread pool.
-                // Acks from those handlers on this one channel are fine - the client serializes frame writes;
-                // what a channel cannot do safely is concurrent publishing with confirms (see PublisherChannelPool).
-                return await connection.CreateChannelAsync(
-                    new CreateChannelOptions(
-                        publisherConfirmationsEnabled: false,
-                        publisherConfirmationTrackingEnabled: false,
-                        consumerDispatchConcurrency: (ushort)settings.ConsumerConcurrency
-                    ),
-                    ct
-                );
+                return await rabbit.GetAsync(ct);
             }
             catch (BrokerUnreachableException ex)
             {
@@ -86,6 +77,40 @@ public sealed class MessageConsumer(
                 );
                 await Task.Delay(delay, time, ct);
             }
+        }
+    }
+
+    private async Task<IChannel> ConsumeAsync(
+        IConnection connection,
+        string queue,
+        RabbitMqOptions settings,
+        CancellationToken stoppingToken
+    )
+    {
+        // Dispatch concurrency > 1: the client runs ReceivedAsync handlers of this channel in parallel on
+        // the thread pool. Acks from those handlers on the one channel are fine - the client serializes
+        // frame writes; what a channel cannot do safely is concurrent publishing with confirms (see PublisherChannelPool).
+        var channel = await connection.CreateChannelAsync(
+            new CreateChannelOptions(
+                publisherConfirmationsEnabled: false,
+                publisherConfirmationTrackingEnabled: false,
+                consumerDispatchConcurrency: (ushort)settings.ConsumerConcurrency
+            ),
+            stoppingToken
+        );
+        try
+        {
+            await channel.BasicQosAsync(0, (ushort)settings.Prefetch, global: false, stoppingToken);
+            var consumer = new AsyncEventingBasicConsumer(channel);
+            consumer.ReceivedAsync += (_, delivery) =>
+                HandleAsync(channel, queue, delivery, stoppingToken);
+            await channel.BasicConsumeAsync(queue, autoAck: false, consumer, stoppingToken);
+            return channel;
+        }
+        catch
+        {
+            await channel.DisposeAsync(); // not handed to ExecuteAsync - close it here
+            throw;
         }
     }
 
