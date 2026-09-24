@@ -1,0 +1,5 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Tasks are defined in .husky/task-runner.json (CSharpier check of staged *.cs files).
+dotnet husky run --group pre-commit

@@ -235,7 +235,14 @@ docker image rm observability-lab:local
 dotnet test                      # testy jednostkowe + integracyjne (Testcontainers PostgreSQL)
 dotnet tool restore
 dotnet csharpier check .         # formatowanie (CSharpier)
+dotnet csharpier format .        # automatyczne formatowanie
 ```
+
+**Git hooks (Husky.Net):** pierwszy `dotnet restore`/`build` instaluje hooki automatycznie
+(`core.hooksPath=.husky`). Hook `pre-commit` uruchamia `dotnet csharpier check` na stage'owanych plikach `*.cs`
+(zadania w `.husky/task-runner.json`) i blokuje commit, jeśli formatowanie się nie zgadza.
+Ręcznie: `dotnet husky install`, `dotnet husky run --group pre-commit`. Wyłączenie instalacji hooków: `HUSKY=0`
+(ustawione w Dockerfile).
 
 ## Struktura
 

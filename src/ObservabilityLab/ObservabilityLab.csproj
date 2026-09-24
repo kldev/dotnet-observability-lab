@@ -28,4 +28,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="ObservabilityLab.Tests" />
   </ItemGroup>
+  <!-- Installs the Husky.Net git hooks on restore (fresh clone -> hooks active). Disabled with HUSKY=0 (Docker build). -->
+  <Target Name="Husky" BeforeTargets="Restore;CollectPackageReferences" Condition="'$(HUSKY)' != 0">
+    <Exec Command="dotnet tool restore" StandardOutputImportance="Low" StandardErrorImportance="High" />
+    <Exec Command="dotnet husky install" StandardOutputImportance="Low" StandardErrorImportance="High" WorkingDirectory="../.." />
+  </Target>
+
 </Project>
