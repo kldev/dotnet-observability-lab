@@ -1,0 +1,15 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 5s
+      # Exemplars carry trace_id -> clicking a dot on a latency chart opens the trace in Rootprint.
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          urlDisplayLabel: Open trace in Rootprint
+          url: ${ROOTPRINT_PUBLIC_URL}/traces/$${__value.raw}

@@ -1,0 +1,17 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+TestResults/
+*.trx
+
+# Secrets / local config
+.env
+*.env.local
+
+# k6 output
+k6/results/

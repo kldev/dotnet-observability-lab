@@ -1,0 +1,20 @@
+# Quickwit = the search engine under Rootprint. Both the metastore and the index
+# splits live in the S3 bucket (RustFS), so all logs and traces end up in S3.
+# ${VAR} values are interpolated by Quickwit from the container environment.
+version: 0.8
+
+cluster_id: observability-lab
+node_id: quickwit-1
+listen_address: 0.0.0.0
+
+metastore_uri: s3://${S3_BUCKET}/quickwit/indexes
+default_index_root_uri: s3://${S3_BUCKET}/quickwit/indexes
+
+storage:
+  s3:
+    endpoint: ${S3_ENDPOINT}
+    region: ${S3_REGION}
+    force_path_style_access: true
+
+rest:
+  listen_port: 7280

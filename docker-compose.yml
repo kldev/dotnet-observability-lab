@@ -1,0 +1,208 @@
+# Observability lab - everything with one command:  docker compose up -d
+#
+#   app ──/metrics──▶ prometheus ──▶ grafana
+#    │
+#    └──OTLP (logs + traces)──▶ otel-collector ──▶ rootprint ──▶ quickwit ──S3 API──▶ rustfs
+#
+# Secrets come from .env (copy .env.example). Nothing secret is stored in this file.
+
+name: observability-lab
+
+x-s3-env: &s3-env
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://rustfs:9000}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env (see .env.example)}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env (see .env.example)}
+  S3_BUCKET: ${S3_BUCKET:-observability-logs}
+  S3_REGION: ${S3_REGION:-us-east-1}
+
+services:
+  # --- Application -------------------------------------------------------------------------
+  app:
+    build: .
+    image: observability-lab:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__Orders: Host=postgres;Port=5432;Database=${POSTGRES_DB:-orders};Username=${POSTGRES_USER:-lab};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 5000
+      DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-true}
+      RANDOM_PROBLEMS_ENABLED: ${RANDOM_PROBLEMS_ENABLED:-false}
+      RANDOM_ERROR_RATE: ${RANDOM_ERROR_RATE:-0}
+      RANDOM_EXCEPTION_RATE: ${RANDOM_EXCEPTION_RATE:-0}
+      RANDOM_SLOW_REQUEST_RATE: ${RANDOM_SLOW_REQUEST_RATE:-0}
+      RANDOM_DB_ERROR_RATE: ${RANDOM_DB_ERROR_RATE:-0}
+      RANDOM_SLOW_DB_RATE: ${RANDOM_SLOW_DB_RATE:-0}
+      RANDOM_VERBOSE_LOG_RATE: ${RANDOM_VERBOSE_LOG_RATE:-0}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    # Limits make "CPU %" and "Memory %" on the dashboard meaningful (% of what the container may use).
+    cpus: 2
+    mem_limit: 512m
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-orders}
+      ROOTPRINT_DB_PASSWORD: ${ROOTPRINT_DB_PASSWORD:?set ROOTPRINT_DB_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-rootprint-db.sh:/docker-entrypoint-initdb.d/10-rootprint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # --- Metrics -------------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --enable-feature=exemplar-storage
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/observability-lab.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      ROOTPRINT_PUBLIC_URL: ${ROOTPRINT_PUBLIC_URL:-http://localhost:8282}
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+
+  # --- Logs + traces: collector -> Rootprint -> Quickwit -> S3 (RustFS) ------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    depends_on:
+      rootprint-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ./deploy/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+      - rootprint-bootstrap:/bootstrap:ro
+
+  rootprint:
+    image: ghcr.io/rootprint/rootprint:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      quickwit:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://rootprint:${ROOTPRINT_DB_PASSWORD}@postgres:5432/rootprint
+      QUICKWIT_URL: http://quickwit:7280
+      ORIGIN: ${ROOTPRINT_PUBLIC_URL:-http://localhost:8282}
+    ports:
+      - "${ROOTPRINT_PORT:-8282}:8282"
+    healthcheck:
+      # The image has no wget/curl, but it has bun.
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://localhost:8282/api/health'); process.exit(r.ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Creates the Rootprint admin + ingest key once and hands the key to the collector.
+  rootprint-bootstrap:
+    image: curlimages/curl:latest
+    user: "0"
+    restart: "no"
+    depends_on:
+      rootprint:
+        condition: service_healthy
+    environment:
+      ROOTPRINT_ORIGIN: ${ROOTPRINT_PUBLIC_URL:-http://localhost:8282}
+      ROOTPRINT_ADMIN_EMAIL: ${ROOTPRINT_ADMIN_EMAIL:-admin@lab.local}
+      ROOTPRINT_ADMIN_PASSWORD: ${ROOTPRINT_ADMIN_PASSWORD:?set ROOTPRINT_ADMIN_PASSWORD in .env}
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
+    volumes:
+      - ./deploy/rootprint/bootstrap.sh:/bootstrap.sh:ro
+      - rootprint-bootstrap:/bootstrap
+
+  # Search engine used by Rootprint. Metastore and index data are stored in the S3 bucket.
+  quickwit:
+    image: quickwit/quickwit:v0.9.0
+    restart: unless-stopped
+    command: ["run"]
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *s3-env
+      QW_CONFIG: /quickwit/config/quickwit.yaml
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_REGION: ${S3_REGION:-us-east-1}
+      QW_DISABLE_TELEMETRY: "1"
+    volumes:
+      - ./deploy/rootprint/quickwit.yaml:/quickwit/config/quickwit.yaml:ro
+      - quickwit-data:/quickwit/qwdata   # local cache / write-ahead queue only
+    healthcheck:
+      test: ["CMD-SHELL", 'bash -c "echo > /dev/tcp/localhost/7280"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # --- S3-compatible storage -----------------------------------------------------------------
+  rustfs:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - rustfs-data:/data
+    ports:
+      - "${RUSTFS_S3_PORT:-9000}:9000"
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
+
+  rustfs-init:
+    image: curlimages/curl:latest
+    restart: "no"
+    depends_on:
+      - rustfs
+    environment: *s3-env
+    entrypoint: ["/bin/sh", "/create-bucket.sh"]
+    volumes:
+      - ./deploy/rustfs/create-bucket.sh:/create-bucket.sh:ro
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+  quickwit-data:
+  rustfs-data:
+  rootprint-bootstrap:

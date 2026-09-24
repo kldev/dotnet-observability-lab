@@ -1,0 +1,34 @@
+# .NET app --OTLP--> collector --OTLP/HTTP (protobuf)--> Rootprint --> Quickwit --> S3 (RustFS)
+# The collector exists so the ingest key created by rootprint-bootstrap can be injected
+# without restarting/configuring the app, and to batch + retry exports.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+  batch:
+    timeout: 2s
+
+exporters:
+  otlp_http/rootprint:
+    endpoint: http://rootprint:8282   # the exporter appends /v1/logs and /v1/traces
+    headers:
+      authorization: "Bearer ${file:/bootstrap/rootprint-ingest-key}"
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/rootprint]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/rootprint]

@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # The app running in docker compose.
+  - job_name: observability-lab
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["app:8080"]
+
+  # The app started locally with `dotnet run` (docker-compose.dev.yml). "Down" is normal otherwise.
+  - job_name: observability-lab-local
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:5253"]

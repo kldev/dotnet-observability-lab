@@ -1,0 +1,24 @@
+# Development overrides:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# - app runs with ASPNETCORE_ENVIRONMENT=Development (diagnostics endpoints always on, more logs)
+# - PostgreSQL, OTLP (collector) and Quickwit are published on the host, so you can
+#   run the app locally with `dotnet run` (see README) and use psql / Quickwit UI directly.
+services:
+  app:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__ObservabilityLab: Debug
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  otel-collector:
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  quickwit:
+    ports:
+      - "127.0.0.1:7280:7280"   # Quickwit REST API + UI (http://localhost:7280/ui)
