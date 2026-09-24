@@ -35,6 +35,23 @@ Testy integracyjne uruchamiają PostgreSQL przez Testcontainers — potrzebny dz
 
 ## 2. Uruchomienie Docker Compose (zalecane)
 
+Najprościej skryptem `start.sh` (jak w `_PROJEKTY/infrastructure`) — sam tworzy `.env` z `.env.example`, jeśli go brak,
+i na koniec wypisuje wszystkie adresy:
+
+```bash
+./start.sh                 # start całości
+./start.sh --b             # przebudowa obrazu aplikacji
+./start.sh --expose        # + PostgreSQL 5432, OTLP 4317/4318, Quickwit 7280 na hoście (docker-compose.dev.yml)
+./start.sh --logs [svc]    # logi (domyślnie app), np. --logs rootprint
+./start.sh --status        # stan kontenerów
+./start.sh --traffic       # ruch k6 | --problems: ruch z random problems
+./start.sh --sa            # zatrzymaj tylko app (np. przed dotnet run)
+./start.sh --stop          # down (dane zostają) | --clean: down -v (usuwa dane)
+./start.sh --help
+```
+
+Albo ręcznie:
+
 ```bash
 cp .env.example .env        # lokalne hasła/klucze; .env jest w .gitignore
 docker compose up -d        # pierwsze uruchomienie buduje obraz aplikacji
