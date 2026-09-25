@@ -18,6 +18,24 @@
   "version": 1,
   "links": [
     {
+      "title": "RabbitMQ queue",
+      "type": "link",
+      "url": "/d/observability-lab-rabbitmq",
+      "targetBlank": false,
+      "icon": "dashboard",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "PostgreSQL",
+      "type": "link",
+      "url": "/d/observability-lab-postgres",
+      "targetBlank": false,
+      "icon": "dashboard",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
       "title": "Rootprint (logs & traces)",
       "type": "link",
       "url": "http://localhost:8282",
@@ -32,15 +50,6 @@
       "icon": "external link"
     },
     {
-      "title": "RabbitMQ queue",
-      "type": "link",
-      "url": "/d/observability-lab-rabbitmq",
-      "targetBlank": false,
-      "icon": "dashboard",
-      "keepTime": true,
-      "includeVars": true
-    },
-    {
       "title": "RabbitMQ UI",
       "type": "link",
       "url": "http://localhost:15672",
@@ -48,13 +57,18 @@
       "icon": "external link"
     },
     {
-      "title": "PostgreSQL",
+      "title": "RustFS console",
       "type": "link",
-      "url": "/d/observability-lab-postgres",
-      "targetBlank": false,
-      "icon": "dashboard",
-      "keepTime": true,
-      "includeVars": true
+      "url": "http://localhost:9001",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
+      "title": "API docs (Scalar)",
+      "type": "link",
+      "url": "http://localhost:8080/docs",
+      "targetBlank": true,
+      "icon": "external link"
     }
   ],
   "templating": {

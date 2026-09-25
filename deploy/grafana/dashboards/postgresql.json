@@ -41,6 +41,34 @@
       "url": "http://localhost:8282",
       "targetBlank": true,
       "icon": "external link"
+    },
+    {
+      "title": "Prometheus",
+      "type": "link",
+      "url": "http://localhost:9090",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
+      "title": "RabbitMQ UI",
+      "type": "link",
+      "url": "http://localhost:15672",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
+      "title": "RustFS console",
+      "type": "link",
+      "url": "http://localhost:9001",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
+      "title": "API docs (Scalar)",
+      "type": "link",
+      "url": "http://localhost:8080/docs",
+      "targetBlank": true,
+      "icon": "external link"
     }
   ],
   "templating": {

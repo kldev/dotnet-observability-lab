@@ -18,15 +18,6 @@
   "version": 1,
   "links": [
     {
-      "title": "PostgreSQL",
-      "type": "link",
-      "url": "/d/observability-lab-postgres",
-      "targetBlank": false,
-      "icon": "dashboard",
-      "keepTime": true,
-      "includeVars": true
-    },
-    {
       "title": "Observability Lab (.NET 10)",
       "type": "link",
       "url": "/d/observability-lab",
@@ -36,6 +27,29 @@
       "includeVars": true
     },
     {
+      "title": "PostgreSQL",
+      "type": "link",
+      "url": "/d/observability-lab-postgres",
+      "targetBlank": false,
+      "icon": "dashboard",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "Rootprint (logs & traces)",
+      "type": "link",
+      "url": "http://localhost:8282",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
+      "title": "Prometheus",
+      "type": "link",
+      "url": "http://localhost:9090",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
       "title": "RabbitMQ UI",
       "type": "link",
       "url": "http://localhost:15672",
@@ -43,9 +57,16 @@
       "icon": "external link"
     },
     {
-      "title": "Rootprint (logs & traces)",
+      "title": "RustFS console",
       "type": "link",
-      "url": "http://localhost:8282",
+      "url": "http://localhost:9001",
+      "targetBlank": true,
+      "icon": "external link"
+    },
+    {
+      "title": "API docs (Scalar)",
+      "type": "link",
+      "url": "http://localhost:8080/docs",
       "targetBlank": true,
       "icon": "external link"
     }
