@@ -50,6 +50,7 @@ i na koniec wypisuje wszystkie adresy:
 ./start.sh --logs [svc]    # logi (domyślnie app), np. --logs rootprint
 ./start.sh --status        # stan kontenerów
 ./start.sh --traffic       # ruch k6 | --problems: ruch z random problems | --messages: ruch RabbitMQ
+./traffic.sh              # wszystkie trzy skrypty k6 naraz w tle | status | logs [name] | stop
 ./start.sh --sa            # zatrzymaj tylko app (np. przed dotnet run)
 ./start.sh --stop          # down (dane zostają) | --clean: down -v (usuwa dane)
 ./start.sh --help
@@ -237,6 +238,17 @@ k6 run k6/problems.js                        # włącza random problems + co 10 
 k6 run k6/messages.js                        # RabbitMQ: pojedyncze publikacje (część wolnych, ~3% z fail -> DLQ),
                                              # e-maile do x.emails (losowy dział/priorytet, support celowo wolny)
                                              # + co ~20 s burst 1000 wiadomości z 32 wątków
+```
+
+Wszystkie naraz, w tle (logi i PID-y w `k6/results/`):
+
+```bash
+./traffic.sh                                 # orders + problems + messages
+DURATION=30m VUS=20 ./traffic.sh             # zmienne środowiskowe idą do k6 jako -e
+./traffic.sh start orders messages           # tylko wybrane
+./traffic.sh status                          # co jeszcze chodzi + ostatni postęp k6
+./traffic.sh logs problems                   # tail -f jednego logu (bez nazwy: wszystkich)
+./traffic.sh stop                            # SIGINT -> k6 wykonuje teardown (problems.js wyłącza random problems)
 ```
 
 `BASE_URL` domyślnie `http://localhost:8080` (dla `dotnet run`: `-e BASE_URL=http://localhost:5253`).
